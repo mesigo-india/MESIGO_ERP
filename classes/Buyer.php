@@ -25,7 +25,7 @@ class Buyer
         $params = [];
 
         if ($search !== '') {
-            $where[] = '(b.buyer_code LIKE :search OR b.company_name LIKE :search OR b.contact_person LIKE :search OR b.email LIKE :search OR b.phone LIKE :search)';
+            $where[] = '(b.buyer_code LIKE :search OR b.company_name LIKE :search OR b.primary_contact_name LIKE :search OR b.email LIKE :search)';
             $params['search'] = '%' . $search . '%';
         }
 
@@ -35,11 +35,8 @@ class Buyer
         }
 
         $stmt = $this->db->prepare("
-            SELECT b.*, c.name as country_name, s.name as state_name, ci.name as city_name
+            SELECT b.*
             FROM " . self::TABLE . " b
-            LEFT JOIN countries c ON b.country_id = c.id
-            LEFT JOIN states s ON b.state_id = s.id
-            LEFT JOIN cities ci ON b.city_id = ci.id
             WHERE " . implode(' AND ', $where) . "
             ORDER BY b.company_name ASC
             LIMIT :limit OFFSET :offset
@@ -57,30 +54,15 @@ class Buyer
 
     public function findById(int $id): ?array
     {
-        $stmt = $this->db->prepare("
-            SELECT b.*, c.name as country_name, s.name as state_name, ci.name as city_name
-            FROM " . self::TABLE . " b
-            LEFT JOIN countries c ON b.country_id = c.id
-            LEFT JOIN states s ON b.state_id = s.id
-            LEFT JOIN cities ci ON b.city_id = ci.id
-            WHERE b.id = :id AND b.deleted_at IS NULL
-        ");
+        $stmt = $this->db->prepare("SELECT * FROM " . self::TABLE . " WHERE id = :id AND deleted_at IS NULL");
         $stmt->execute(['id' => $id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $result ?: null;
-    }
-
-    /**
-     * Find by buyer code
-     */
-    public function findByCode(string $code): ?array
-    {
-        $stmt = $this->db->prepare("
-            SELECT * FROM " . self::TABLE . " 
-            WHERE buyer_code = :code AND deleted_at IS NULL
-        ");
-        $stmt->execute(['code' => $code]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result) {
+            $result['contacts'] = $this->getContacts($id);
+            $result['addresses'] = $this->getAddresses($id);
+        }
+        
         return $result ?: null;
     }
 
@@ -90,15 +72,15 @@ class Buyer
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO " . self::TABLE . " 
-                (buyer_code, company_name, contact_person, email, phone, address,
-                 country_id, state_id, city_id, gst_number, iec_number, status, 
-                 created_by, created_at) 
+                (buyer_code, company_name, company_website, primary_contact_name, primary_contact_email, primary_contact_phone,
+                 bank_name, bank_branch, bank_account_number, bank_swift_code, payment_terms, export_region, crm_notes,
+                 status, created_at) 
                 VALUES 
-                (:buyer_code, :company_name, :contact_person, :email, :phone, :address,
-                 :country_id, :state_id, :city_id, :gst_number, :iec_number, :status,
-                 :created_by, NOW())
+                (:buyer_code, :company_name, :company_website, :primary_contact_name, :primary_contact_email, :primary_contact_phone,
+                 :bank_name, :bank_branch, :bank_account_number, :bank_swift_code, :payment_terms, :export_region, :crm_notes,
+                 :status, NOW())
             ");
-            $stmt->execute($this->buyerPayload($data, true));
+            $stmt->execute($this->buyerPayload($data));
 
             $buyerId = (int) $this->db->lastInsertId();
             $this->syncContacts($buyerId, $data['contacts'] ?? []);
@@ -116,16 +98,17 @@ class Buyer
     {
         $this->db->beginTransaction();
         try {
-            $payload = $this->buyerPayload($data, false);
+            $payload = $this->buyerPayload($data);
             $payload['id'] = $id;
 
             $stmt = $this->db->prepare("
                 UPDATE " . self::TABLE . "
-                SET buyer_code = :buyer_code, company_name = :company_name, contact_person = :contact_person,
-                    email = :email, phone = :phone, address = :address,
-                    country_id = :country_id, state_id = :state_id, city_id = :city_id,
-                    gst_number = :gst_number, iec_number = :iec_number, status = :status,
-                    updated_by = :updated_by, updated_at = NOW()
+                SET buyer_code = :buyer_code, company_name = :company_name, company_website = :company_website,
+                    primary_contact_name = :primary_contact_name, primary_contact_email = :primary_contact_email, 
+                    primary_contact_phone = :primary_contact_phone, bank_name = :bank_name, bank_branch = :bank_branch, 
+                    bank_account_number = :bank_account_number, bank_swift_code = :bank_swift_code, 
+                    payment_terms = :payment_terms, export_region = :export_region, crm_notes = :crm_notes,
+                    status = :status, updated_at = NOW()
                 WHERE id = :id AND deleted_at IS NULL
             ");
             $updated = $stmt->execute($payload);
@@ -143,138 +126,59 @@ class Buyer
 
     public function delete(int $id, ?int $deletedBy = null): bool
     {
-        $stmt = $this->db->prepare("
-            UPDATE " . self::TABLE . " 
-            SET status = 0, deleted_at = NOW(), deleted_by = :deleted_by
-            WHERE id = :id
-        ");
-        return $stmt->execute([
-            'id' => $id,
-            'deleted_by' => $deletedBy,
-        ]);
+        $stmt = $this->db->prepare("UPDATE " . self::TABLE . " SET status = 0, deleted_at = NOW() WHERE id = :id");
+        return $stmt->execute(['id' => $id]);
     }
 
     public function getContacts(int $buyerId): array
     {
-        $stmt = $this->db->prepare("
-            SELECT * FROM buyer_contacts
-            WHERE buyer_id = :buyer_id AND status = 1
-            ORDER BY is_primary DESC, name ASC
-        ");
+        $stmt = $this->db->prepare("SELECT * FROM buyer_contacts WHERE buyer_id = :buyer_id");
         $stmt->execute(['buyer_id' => $buyerId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getAddresses(int $buyerId): array
     {
-        $stmt = $this->db->prepare("
-            SELECT * FROM buyer_addresses
-            WHERE buyer_id = :buyer_id AND status = 1
-            ORDER BY is_default DESC, address_type ASC
-        ");
+        $stmt = $this->db->prepare("SELECT * FROM buyer_addresses WHERE buyer_id = :buyer_id");
         $stmt->execute(['buyer_id' => $buyerId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function count(string $search = '', string $status = ''): int
+    private function buyerPayload(array $data): array
     {
-        $where = ['deleted_at IS NULL'];
-        $params = [];
-
-        if ($search !== '') {
-            $where[] = '(buyer_code LIKE :search OR company_name LIKE :search OR contact_person LIKE :search OR email LIKE :search OR phone LIKE :search)';
-            $params['search'] = '%' . $search . '%';
-        }
-
-        if ($status !== '') {
-            $where[] = 'status = :status';
-            $params['status'] = (int) $status;
-        }
-
-        $stmt = $this->db->prepare("SELECT COUNT(*) FROM " . self::TABLE . " WHERE " . implode(' AND ', $where));
-        foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
-        }
-        $stmt->execute();
-        return (int) $stmt->fetchColumn();
-    }
-
-    private function buyerPayload(array $data, bool $creating): array
-    {
-        $payload = [
+        return [
             'buyer_code' => $data['buyer_code'],
             'company_name' => $data['company_name'],
-            'contact_person' => $data['contact_person'] ?? null,
-            'email' => $data['email'] ?? null,
-            'phone' => $data['phone'] ?? null,
-            'address' => json_encode($data['profile'] ?? []),
-            'country_id' => $data['country_id'] ?: null,
-            'state_id' => $data['state_id'] ?: null,
-            'city_id' => $data['city_id'] ?: null,
-            'gst_number' => $data['gst_number'] ?? null,
-            'iec_number' => $data['iec_number'] ?? null,
+            'company_website' => $data['company_website'] ?? null,
+            'primary_contact_name' => $data['primary_contact_name'] ?? null,
+            'primary_contact_email' => $data['primary_contact_email'] ?? null,
+            'primary_contact_phone' => $data['primary_contact_phone'] ?? null,
+            'bank_name' => $data['bank_name'] ?? null,
+            'bank_branch' => $data['bank_branch'] ?? null,
+            'bank_account_number' => $data['bank_account_number'] ?? null,
+            'bank_swift_code' => $data['bank_swift_code'] ?? null,
+            'payment_terms' => $data['payment_terms'] ?? null,
+            'export_region' => $data['export_region'] ?? null,
+            'crm_notes' => $data['crm_notes'] ?? null,
             'status' => (int) ($data['status'] ?? 1),
         ];
-
-        if ($creating) {
-            $payload['created_by'] = $data['created_by'] ?? null;
-        } else {
-            $payload['updated_by'] = $data['updated_by'] ?? null;
-        }
-
-        return $payload;
     }
 
     private function syncContacts(int $buyerId, array $contacts): void
     {
         $this->db->prepare("DELETE FROM buyer_contacts WHERE buyer_id = :buyer_id")->execute(['buyer_id' => $buyerId]);
-
-        $stmt = $this->db->prepare("
-            INSERT INTO buyer_contacts (buyer_id, name, designation, email, phone, mobile, is_primary, status, created_at)
-            VALUES (:buyer_id, :name, :designation, :email, :phone, :mobile, :is_primary, 1, NOW())
-        ");
-
-        foreach ($contacts as $contact) {
-            if (trim((string) ($contact['name'] ?? '')) === '') {
-                continue;
-            }
-
-            $stmt->execute([
-                'buyer_id' => $buyerId,
-                'name' => trim((string) $contact['name']),
-                'designation' => trim((string) ($contact['designation'] ?? '')) ?: null,
-                'email' => trim((string) ($contact['email'] ?? '')) ?: null,
-                'phone' => trim((string) ($contact['phone'] ?? '')) ?: null,
-                'mobile' => trim((string) ($contact['mobile'] ?? '')) ?: null,
-                'is_primary' => (int) ($contact['is_primary'] ?? 0),
-            ]);
+        $stmt = $this->db->prepare("INSERT INTO buyer_contacts (buyer_id, name, designation, email, phone) VALUES (?, ?, ?, ?, ?)");
+        foreach ($contacts as $c) {
+            $stmt->execute([$buyerId, $c['name'], $c['designation'] ?? null, $c['email'] ?? null, $c['phone'] ?? null]);
         }
     }
 
     private function syncAddresses(int $buyerId, array $addresses): void
     {
         $this->db->prepare("DELETE FROM buyer_addresses WHERE buyer_id = :buyer_id")->execute(['buyer_id' => $buyerId]);
-
-        $stmt = $this->db->prepare("
-            INSERT INTO buyer_addresses (buyer_id, address_type, address, country_id, state_id, city_id, zip, is_default, status, created_at)
-            VALUES (:buyer_id, :address_type, :address, :country_id, :state_id, :city_id, :zip, :is_default, 1, NOW())
-        ");
-
-        foreach ($addresses as $address) {
-            if (trim((string) ($address['address'] ?? '')) === '') {
-                continue;
-            }
-
-            $stmt->execute([
-                'buyer_id' => $buyerId,
-                'address_type' => trim((string) ($address['address_type'] ?? 'billing')) ?: 'billing',
-                'address' => trim((string) $address['address']),
-                'country_id' => $address['country_id'] ?: null,
-                'state_id' => $address['state_id'] ?: null,
-                'city_id' => $address['city_id'] ?: null,
-                'zip' => trim((string) ($address['zip'] ?? '')) ?: null,
-                'is_default' => (int) ($address['is_default'] ?? 0),
-            ]);
+        $stmt = $this->db->prepare("INSERT INTO buyer_addresses (buyer_id, address_type, address_line1, city, country, postal_code) VALUES (?, ?, ?, ?, ?, ?)");
+        foreach ($addresses as $a) {
+            $stmt->execute([$buyerId, $a['type'], $a['line1'], $a['city'], $a['country'], $a['zip']]);
         }
     }
 }
