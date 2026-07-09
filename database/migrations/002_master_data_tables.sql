@@ -1,169 +1,52 @@
--- MESIGO ERP - Master Data Engine Migration
--- Sprint-002: Adds new master data tables
+-- Upgrading Buyer table for Export CRM requirements
+ALTER TABLE buyers 
+ADD COLUMN company_website VARCHAR(255) NULL,
+ADD COLUMN primary_contact_name VARCHAR(150) NULL,
+ADD COLUMN primary_contact_email VARCHAR(150) NULL,
+ADD COLUMN primary_contact_phone VARCHAR(50) NULL,
+ADD COLUMN bank_name VARCHAR(255) NULL,
+ADD COLUMN bank_branch VARCHAR(255) NULL,
+ADD COLUMN bank_account_number VARCHAR(100) NULL,
+ADD COLUMN bank_swift_code VARCHAR(50) NULL,
+ADD COLUMN payment_terms VARCHAR(100) NULL,
+ADD COLUMN export_region VARCHAR(100) NULL,
+ADD COLUMN crm_notes TEXT NULL,
+ADD COLUMN crm_last_contacted_at DATETIME NULL;
 
--- Branches table
-CREATE TABLE IF NOT EXISTS `branches` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `company_id` BIGINT UNSIGNED NULL,
-    `branch_code` VARCHAR(50) NOT NULL,
-    `branch_name` VARCHAR(255) NOT NULL,
-    `address` TEXT NULL,
-    `city` VARCHAR(100) NULL,
-    `state` VARCHAR(100) NULL,
-    `country` VARCHAR(100) NULL,
-    `zip` VARCHAR(20) NULL,
-    `email` VARCHAR(255) NULL,
-    `phone` VARCHAR(20) NULL,
-    `gst_number` VARCHAR(50) NULL,
-    `contact_person` VARCHAR(255) NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_branches_code` (`branch_code`),
-    KEY `idx_branches_status` (`status`),
-    KEY `idx_branches_company` (`company_id`),
-    KEY `idx_branches_created` (`created_at`),
-    CONSTRAINT `fk_branches_company` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_branches_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_branches_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_branches_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Create table for multiple contacts
+CREATE TABLE IF NOT EXISTS buyer_contacts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    buyer_id INT NOT NULL,
+    name VARCHAR(150),
+    designation VARCHAR(100),
+    email VARCHAR(150),
+    phone VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (buyer_id) REFERENCES buyers(id) ON DELETE CASCADE
+);
 
--- HS Codes table
-CREATE TABLE IF NOT EXISTS `hs_codes` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `hs_code` VARCHAR(20) NOT NULL,
-    `description` TEXT NULL,
-    `category` VARCHAR(255) NULL,
-    `duty_rate` DECIMAL(5,2) NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_hs_codes_code` (`hs_code`),
-    KEY `idx_hs_codes_status` (`status`),
-    KEY `idx_hs_codes_created` (`created_at`),
-    CONSTRAINT `fk_hs_codes_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_hs_codes_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_hs_codes_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Create table for multiple addresses
+CREATE TABLE IF NOT EXISTS buyer_addresses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    buyer_id INT NOT NULL,
+    address_type ENUM('billing', 'shipping', 'other') DEFAULT 'billing',
+    address_line1 VARCHAR(255),
+    address_line2 VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(100),
+    country VARCHAR(100),
+    postal_code VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (buyer_id) REFERENCES buyers(id) ON DELETE CASCADE
+);
 
--- Product Grades table
-CREATE TABLE IF NOT EXISTS `product_grades` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(100) NOT NULL,
-    `code` VARCHAR(20) NOT NULL,
-    `description` TEXT NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_product_grades_code` (`code`),
-    KEY `idx_product_grades_status` (`status`),
-    KEY `idx_product_grades_created` (`created_at`),
-    CONSTRAINT `fk_product_grades_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_product_grades_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_product_grades_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Product Origins table
-CREATE TABLE IF NOT EXISTS `product_origins` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(100) NOT NULL,
-    `code` VARCHAR(20) NOT NULL,
-    `description` TEXT NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_product_origins_code` (`code`),
-    KEY `idx_product_origins_status` (`status`),
-    KEY `idx_product_origins_created` (`created_at`),
-    CONSTRAINT `fk_product_origins_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_product_origins_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_product_origins_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Freight Forwarders table
-CREATE TABLE IF NOT EXISTS `freight_forwarders` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `forwarder_code` VARCHAR(50) NOT NULL,
-    `company_name` VARCHAR(255) NOT NULL,
-    `address` TEXT NULL,
-    `city` VARCHAR(100) NULL,
-    `country_id` BIGINT UNSIGNED NULL,
-    `contact_person` VARCHAR(255) NULL,
-    `email` VARCHAR(255) NULL,
-    `phone` VARCHAR(20) NULL,
-    `mobile` VARCHAR(20) NULL,
-    `services` TEXT NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_freight_forwarders_code` (`forwarder_code`),
-    KEY `idx_freight_forwarders_status` (`status`),
-    KEY `idx_freight_forwarders_created` (`created_at`),
-    CONSTRAINT `fk_freight_forwarders_country` FOREIGN KEY (`country_id`) REFERENCES `countries` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_freight_forwarders_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_freight_forwarders_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_freight_forwarders_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Inspection Agencies table
-CREATE TABLE IF NOT EXISTS `inspection_agencies` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `agency_code` VARCHAR(50) NOT NULL,
-    `agency_name` VARCHAR(255) NOT NULL,
-    `address` TEXT NULL,
-    `city` VARCHAR(100) NULL,
-    `country_id` BIGINT UNSIGNED NULL,
-    `contact_person` VARCHAR(255) NULL,
-    `email` VARCHAR(255) NULL,
-    `phone` VARCHAR(20) NULL,
-    `mobile` VARCHAR(20) NULL,
-    `accreditation` TEXT NULL,
-    `services` TEXT NULL,
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `remarks` TEXT NULL,
-    `created_by` BIGINT UNSIGNED NULL,
-    `updated_by` BIGINT UNSIGNED NULL,
-    `deleted_by` BIGINT UNSIGNED NULL,
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_inspection_agencies_code` (`agency_code`),
-    KEY `idx_inspection_agencies_status` (`status`),
-    KEY `idx_inspection_agencies_created` (`created_at`),
-    CONSTRAINT `fk_inspection_agencies_country` FOREIGN KEY (`country_id`) REFERENCES `countries` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_inspection_agencies_created` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_inspection_agencies_updated` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_inspection_agencies_deleted` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Create table for documents
+CREATE TABLE IF NOT EXISTS buyer_documents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    buyer_id INT NOT NULL,
+    document_name VARCHAR(255),
+    file_path VARCHAR(255),
+    document_type VARCHAR(100),
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (buyer_id) REFERENCES buyers(id) ON DELETE CASCADE
+);
