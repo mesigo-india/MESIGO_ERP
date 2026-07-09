@@ -12,7 +12,7 @@ class Buyer
 
     public function __construct(PDO $db) { $this->db = $db; }
 
-    public function getAll(string $search = '', string $status = '', int $limit = 100, int $offset = 0): array
+    public function getAll(string $search = '', string $status = '', string $country = '', string $type = '', string $priority = '', int $limit = 20, int $offset = 0): array
     {
         $where = ['deleted_at IS NULL'];
         $params = [];
@@ -20,17 +20,33 @@ class Buyer
             $where[] = '(buyer_code LIKE :search OR company_name LIKE :search)';
             $params['search'] = '%' . $search . '%';
         }
-        if ($status !== '') {
-            $where[] = 'status = :status';
-            $params['status'] = $status;
-        }
+        if ($status !== '') { $where[] = 'status = :status'; $params['status'] = $status; }
+        if ($country !== '') { $where[] = 'country = :country'; $params['country'] = $country; }
+        if ($type !== '') { $where[] = 'buyer_type = :type'; $params['type'] = $type; }
+        if ($priority !== '') { $where[] = 'priority = :priority'; $params['priority'] = $priority; }
 
-        $stmt = $this->db->prepare("SELECT * FROM " . self::TABLE . " WHERE " . implode(' AND ', $where) . " ORDER BY company_name ASC LIMIT :limit OFFSET :offset");
+        $stmt = $this->db->prepare("SELECT * FROM " . self::TABLE . " WHERE " . implode(' AND ', $where) . " ORDER BY created_at DESC LIMIT :limit OFFSET :offset");
         foreach ($params as $k => $v) $stmt->bindValue(':' . $k, $v);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function count(string $search = '', string $status = '', string $country = '', string $type = '', string $priority = ''): int
+    {
+        $where = ['deleted_at IS NULL'];
+        $params = [];
+        if ($search !== '') { $where[] = '(buyer_code LIKE :search OR company_name LIKE :search)'; $params['search'] = '%' . $search . '%'; }
+        if ($status !== '') { $where[] = 'status = :status'; $params['status'] = $status; }
+        if ($country !== '') { $where[] = 'country = :country'; $params['country'] = $country; }
+        if ($type !== '') { $where[] = 'buyer_type = :type'; $params['type'] = $type; }
+        if ($priority !== '') { $where[] = 'priority = :priority'; $params['priority'] = $priority; }
+        
+        $stmt = $this->db->prepare("SELECT COUNT(*) FROM " . self::TABLE . " WHERE " . implode(' AND ', $where));
+        foreach ($params as $k => $v) $stmt->bindValue(':' . $k, $v);
+        $stmt->execute();
+        return (int)$stmt->fetchColumn();
     }
 
     public function findById(int $id): ?array
@@ -40,18 +56,18 @@ class Buyer
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
-    public function create(array $data): int
+    public function create(array $d): int
     {
         $stmt = $this->db->prepare("INSERT INTO " . self::TABLE . " (buyer_code, company_name, buyer_type, priority, lead_source, status, contact_person, designation, email, mobile, phone, website, whatsapp, billing_address, shipping_address, country, state, city, zip, gst_number, iec_number, registration_number, tax_number, bank_name, account_name, account_number, swift_ifsc, payment_terms, credit_days, shipping_mode, preferred_port, shipping_marks, assigned_to, last_contact, next_followup, notes, created_at) VALUES (:buyer_code, :company_name, :buyer_type, :priority, :lead_source, :status, :contact_person, :designation, :email, :mobile, :phone, :website, :whatsapp, :billing_address, :shipping_address, :country, :state, :city, :zip, :gst_number, :iec_number, :registration_number, :tax_number, :bank_name, :account_name, :account_number, :swift_ifsc, :payment_terms, :credit_days, :shipping_mode, :preferred_port, :shipping_marks, :assigned_to, :last_contact, :next_followup, :notes, NOW())");
-        $stmt->execute($this->mapData($data));
+        $stmt->execute($this->mapData($d));
         return (int)$this->db->lastInsertId();
     }
 
-    public function update(int $id, array $data): bool
+    public function update(int $id, array $d): bool
     {
-        $data['id'] = $id;
+        $d['id'] = $id;
         $stmt = $this->db->prepare("UPDATE " . self::TABLE . " SET buyer_code=:buyer_code, company_name=:company_name, buyer_type=:buyer_type, priority=:priority, lead_source=:lead_source, status=:status, contact_person=:contact_person, designation=:designation, email=:email, mobile=:mobile, phone=:phone, website=:website, whatsapp=:whatsapp, billing_address=:billing_address, shipping_address=:shipping_address, country=:country, state=:state, city=:city, zip=:zip, gst_number=:gst_number, iec_number=:iec_number, registration_number=:registration_number, tax_number=:tax_number, bank_name=:bank_name, account_name=:account_name, account_number=:account_number, swift_ifsc=:swift_ifsc, payment_terms=:payment_terms, credit_days=:credit_days, shipping_mode=:shipping_mode, preferred_port=:preferred_port, shipping_marks=:shipping_marks, assigned_to=:assigned_to, last_contact=:last_contact, next_followup=:next_followup, notes=:notes, updated_at=NOW() WHERE id=:id");
-        return $stmt->execute($this->mapData($data));
+        return $stmt->execute($this->mapData($d));
     }
 
     private function mapData(array $d): array
@@ -75,11 +91,5 @@ class Buyer
             'last_contact' => $d['last_contact'] ?? null, 'next_followup' => $d['next_followup'] ?? null,
             'notes' => $d['notes'] ?? null
         ];
-    }
-
-    public function delete(int $id): bool
-    {
-        $stmt = $this->db->prepare("UPDATE " . self::TABLE . " SET deleted_at = NOW() WHERE id = :id");
-        return $stmt->execute(['id' => $id]);
     }
 }
