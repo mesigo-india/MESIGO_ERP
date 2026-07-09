@@ -4,87 +4,82 @@ declare(strict_types=1);
 namespace App\Core;
 
 use PDO;
-use Exception;
 
-/**
- * Buyer Entity - Export CRM Edition
- */
 class Buyer
 {
     private PDO $db;
     private const TABLE = 'buyers';
 
-    public function __construct(PDO $db)
+    public function __construct(PDO $db) { $this->db = $db; }
+
+    public function getAll(string $search = '', string $status = '', int $limit = 100, int $offset = 0): array
     {
-        $this->db = $db;
+        $where = ['deleted_at IS NULL'];
+        $params = [];
+        if ($search !== '') {
+            $where[] = '(buyer_code LIKE :search OR company_name LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+        if ($status !== '') {
+            $where[] = 'status = :status';
+            $params['status'] = $status;
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM " . self::TABLE . " WHERE " . implode(' AND ', $where) . " ORDER BY company_name ASC LIMIT :limit OFFSET :offset");
+        foreach ($params as $k => $v) $stmt->bindValue(':' . $k, $v);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // ... [Existing getAll, findById, count methods remain compatible]
+    public function findById(int $id): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM " . self::TABLE . " WHERE id = :id AND deleted_at IS NULL");
+        $stmt->execute(['id' => $id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
 
     public function create(array $data): int
     {
-        $this->db->beginTransaction();
-        try {
-            $stmt = $this->db->prepare("
-                INSERT INTO " . self::TABLE . " 
-                (buyer_code, company_name, company_website, primary_contact_name, 
-                 primary_contact_email, primary_contact_phone, bank_name, bank_branch, 
-                 bank_account_number, bank_swift_code, payment_terms, export_region, 
-                 crm_notes, status, created_at) 
-                VALUES 
-                (:buyer_code, :company_name, :company_website, :primary_contact_name, 
-                 :primary_contact_email, :primary_contact_phone, :bank_name, :bank_branch, 
-                 :bank_account_number, :bank_swift_code, :payment_terms, :export_region, 
-                 :crm_notes, :status, NOW())
-            ");
-            $stmt->execute($this->buyerPayload($data));
-            $buyerId = (int) $this->db->lastInsertId();
-
-            $this->syncContacts($buyerId, $data['contacts'] ?? []);
-            $this->syncAddresses($buyerId, $data['addresses'] ?? []);
-            $this->db->commit();
-            return $buyerId;
-        } catch (Exception $e) {
-            $this->db->rollBack();
-            throw $e;
-        }
+        $stmt = $this->db->prepare("INSERT INTO " . self::TABLE . " (buyer_code, company_name, buyer_type, priority, lead_source, status, contact_person, designation, email, mobile, phone, website, whatsapp, billing_address, shipping_address, country, state, city, zip, gst_number, iec_number, registration_number, tax_number, bank_name, account_name, account_number, swift_ifsc, payment_terms, credit_days, shipping_mode, preferred_port, shipping_marks, assigned_to, last_contact, next_followup, notes, created_at) VALUES (:buyer_code, :company_name, :buyer_type, :priority, :lead_source, :status, :contact_person, :designation, :email, :mobile, :phone, :website, :whatsapp, :billing_address, :shipping_address, :country, :state, :city, :zip, :gst_number, :iec_number, :registration_number, :tax_number, :bank_name, :account_name, :account_number, :swift_ifsc, :payment_terms, :credit_days, :shipping_mode, :preferred_port, :shipping_marks, :assigned_to, :last_contact, :next_followup, :notes, NOW())");
+        $stmt->execute($this->mapData($data));
+        return (int)$this->db->lastInsertId();
     }
 
-    private function buyerPayload(array $data): array
+    public function update(int $id, array $data): bool
+    {
+        $data['id'] = $id;
+        $stmt = $this->db->prepare("UPDATE " . self::TABLE . " SET buyer_code=:buyer_code, company_name=:company_name, buyer_type=:buyer_type, priority=:priority, lead_source=:lead_source, status=:status, contact_person=:contact_person, designation=:designation, email=:email, mobile=:mobile, phone=:phone, website=:website, whatsapp=:whatsapp, billing_address=:billing_address, shipping_address=:shipping_address, country=:country, state=:state, city=:city, zip=:zip, gst_number=:gst_number, iec_number=:iec_number, registration_number=:registration_number, tax_number=:tax_number, bank_name=:bank_name, account_name=:account_name, account_number=:account_number, swift_ifsc=:swift_ifsc, payment_terms=:payment_terms, credit_days=:credit_days, shipping_mode=:shipping_mode, preferred_port=:preferred_port, shipping_marks=:shipping_marks, assigned_to=:assigned_to, last_contact=:last_contact, next_followup=:next_followup, notes=:notes, updated_at=NOW() WHERE id=:id");
+        return $stmt->execute($this->mapData($data));
+    }
+
+    private function mapData(array $d): array
     {
         return [
-            'buyer_code' => $data['buyer_code'],
-            'company_name' => $data['company_name'],
-            'company_website' => $data['company_website'] ?? null,
-            'primary_contact_name' => $data['primary_contact_name'] ?? null,
-            'primary_contact_email' => $data['primary_contact_email'] ?? null,
-            'primary_contact_phone' => $data['primary_contact_phone'] ?? null,
-            'bank_name' => $data['bank_name'] ?? null,
-            'bank_branch' => $data['bank_branch'] ?? null,
-            'bank_account_number' => $data['bank_account_number'] ?? null,
-            'bank_swift_code' => $data['bank_swift_code'] ?? null,
-            'payment_terms' => $data['payment_terms'] ?? null,
-            'export_region' => $data['export_region'] ?? null,
-            'crm_notes' => $data['crm_notes'] ?? null,
-            'status' => (int) ($data['status'] ?? 1),
+            'id' => $d['id'] ?? null,
+            'buyer_code' => $d['buyer_code'], 'company_name' => $d['company_name'], 'buyer_type' => $d['buyer_type'],
+            'priority' => $d['priority'], 'lead_source' => $d['lead_source'], 'status' => $d['status'],
+            'contact_person' => $d['contact_person'], 'designation' => $d['designation'] ?? null,
+            'email' => $d['email'], 'mobile' => $d['mobile'] ?? null, 'phone' => $d['phone'] ?? null,
+            'website' => $d['website'] ?? null, 'whatsapp' => $d['whatsapp'] ?? null,
+            'billing_address' => $d['billing_address'], 'shipping_address' => $d['shipping_address'] ?? null,
+            'country' => $d['country'], 'state' => $d['state'], 'city' => $d['city'], 'zip' => $d['zip'],
+            'gst_number' => $d['gst_number'] ?? null, 'iec_number' => $d['iec_number'] ?? null,
+            'registration_number' => $d['registration_number'] ?? null, 'tax_number' => $d['tax_number'] ?? null,
+            'bank_name' => $d['bank_name'] ?? null, 'account_name' => $d['account_name'] ?? null,
+            'account_number' => $d['account_number'] ?? null, 'swift_ifsc' => $d['swift_ifsc'] ?? null,
+            'payment_terms' => $d['payment_terms'] ?? null, 'credit_days' => $d['credit_days'] ?? null,
+            'shipping_mode' => $d['shipping_mode'] ?? null, 'preferred_port' => $d['preferred_port'] ?? null,
+            'shipping_marks' => $d['shipping_marks'] ?? null, 'assigned_to' => $d['assigned_to'] ?? null,
+            'last_contact' => $d['last_contact'] ?? null, 'next_followup' => $d['next_followup'] ?? null,
+            'notes' => $d['notes'] ?? null
         ];
     }
 
-    private function syncContacts(int $buyerId, array $contacts): void
+    public function delete(int $id): bool
     {
-        $this->db->prepare("DELETE FROM buyer_contacts WHERE buyer_id = :id")->execute(['id' => $buyerId]);
-        $stmt = $this->db->prepare("INSERT INTO buyer_contacts (buyer_id, name, designation, email, phone) VALUES (?, ?, ?, ?, ?)");
-        foreach ($contacts as $c) {
-            $stmt->execute([$buyerId, $c['name'], $c['designation'] ?? null, $c['email'] ?? null, $c['phone'] ?? null]);
-        }
-    }
-
-    private function syncAddresses(int $buyerId, array $addresses): void
-    {
-        $this->db->prepare("DELETE FROM buyer_addresses WHERE buyer_id = :id")->execute(['id' => $buyerId]);
-        $stmt = $this->db->prepare("INSERT INTO buyer_addresses (buyer_id, address_type, address_line1, city, country, postal_code) VALUES (?, ?, ?, ?, ?, ?)");
-        foreach ($addresses as $a) {
-            $stmt->execute([$buyerId, $a['type'], $a['line1'], $a['city'], $a['country'], $a['zip']]);
-        }
+        $stmt = $this->db->prepare("UPDATE " . self::TABLE . " SET deleted_at = NOW() WHERE id = :id");
+        return $stmt->execute(['id' => $id]);
     }
 }
