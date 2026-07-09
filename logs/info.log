@@ -1,0 +1,12 @@
+[2026-07-08 14:59:54] [INFO] [User: 1] [IP: ::1] User logged in {"user_id":1}
+[2026-07-08 15:00:28] [INFO] [User: system] [IP: ::1] User logged out {"user_id":1}
+[2026-07-08 16:16:43] [INFO] [User: 1] [IP: ::1] User logged in {"user_id":1}
+[2026-07-08 16:18:25] [INFO] [User: 1] [IP: ::1] Company created {"company_id":1}
+[2026-07-08 16:19:01] [INFO] [User: 1] [IP: ::1] Role updated {"role_id":1}
+[2026-07-08 16:20:22] [INFO] [User: 1] [IP: ::1] Buyer created {"buyer_id":1}
+[2026-07-08 16:21:23] [INFO] [User: 1] [IP: ::1] Product created {"product_id":1}
+[2026-07-08 16:22:35] [INFO] [User: 1] [IP: ::1] Quotation created {"quotation_id":1}
+[2026-07-09 04:49:26] [INFO] [User: 1] [IP: ::1] User logged in {"user_id":1}
+[2026-07-09 04:50:34] [INFO] [User: 1] [IP: ::1] Role updated {"role_id":1}
+[2026-07-09 04:50:47] [INFO] [User: 1] [IP: ::1] Permission updated {"permission_id":13}
+[2026-07-09 05:53:52] [INFO] [User: 1] [IP: ::1] User logged in {"user_id":1}
