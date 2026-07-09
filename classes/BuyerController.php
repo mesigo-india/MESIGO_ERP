@@ -11,6 +11,10 @@ class BuyerController extends Controller
     public function __construct()
     {
         parent::__construct();
+        
+        // Ensure the Buyer class file is loaded before instantiation
+        require_once __DIR__ . '/Buyer.php';
+        
         $this->buyers = new Buyer(Database::getInstance());
         $this->validator = new Validator();
     }
