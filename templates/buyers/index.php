@@ -1,73 +1,48 @@
 <?php
-$buyers = $buyers ?? [];
-$search = $search ?? '';
-$status = $status ?? '';
+/**
+ * Buyer CRM List Template
+ */
+include 'includes/header.php';
 ?>
-<div class="page-header">
-    <h1>Buyers</h1>
-    <a href="/buyers/create" class="btn btn-primary">Add Buyer</a>
-</div>
 
-<div class="card mb-3">
-    <div class="card-body">
-        <form method="get" action="/buyers" class="row g-3">
-            <div class="col-md-6">
-                <label class="form-label" for="search">Buyer Search</label>
-                <input type="text" id="search" name="search" class="form-control" value="<?= escapeHtml($search ?? '') ?>" placeholder="Code, company, contact, email or phone">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label" for="status">Status</label>
-                <select id="status" name="status" class="form-select">
-                    <option value="" <?= ($status ?? '') === '' ? 'selected' : '' ?>>All</option>
-                    <option value="1" <?= ($status ?? '') === '1' ? 'selected' : '' ?>>Active</option>
-                    <option value="0" <?= ($status ?? '') === '0' ? 'selected' : '' ?>>Inactive</option>
-                </select>
-            </div>
-            <div class="col-md-3 d-flex align-items-end gap-2">
-                <button type="submit" class="btn btn-primary">Search</button>
-                <a href="/buyers" class="btn btn-outline-secondary">Reset</a>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped datatable">
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5>Buyer CRM</h5>
+            <a href="/buyers/create" class="btn btn-primary btn-sm">Add New Buyer</a>
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>Buyer Code</th>
-                        <th>Company</th>
-                        <th>Contact</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>GST</th>
+                        <th>Code</th>
+                        <th>Company Name</th>
+                        <th>Primary Contact</th>
+                        <th>Region</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($buyers as $buyer): ?>
-                        <tr>
-                            <td><?= escapeHtml($buyer['buyer_code']) ?></td>
-                            <td><?= escapeHtml($buyer['company_name']) ?></td>
-                            <td><?= escapeHtml($buyer['contact_person'] ?? '') ?></td>
-                            <td><?= escapeHtml($buyer['email'] ?? '') ?></td>
-                            <td><?= escapeHtml($buyer['phone'] ?? '') ?></td>
-                            <td><?= escapeHtml($buyer['gst_number'] ?? '') ?></td>
-                            <td><?= statusBadge((int) $buyer['status']) ?></td>
-                            <td>
-                                <a href="/buyers/<?= (int) $buyer['id'] ?>/edit" class="btn btn-sm btn-outline-primary">Edit</a>
-                                <form method="post" action="/buyers/<?= (int) $buyer['id'] ?>/delete" class="d-inline" onsubmit="return confirm('Disable this buyer?');">
-                                    <?= csrfToken() ?>
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Disable</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
+                    <?php if (!empty($buyers)): foreach ($buyers as $b): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($b['buyer_code']) ?></td>
+                        <td><?= htmlspecialchars($b['company_name']) ?></td>
+                        <td><?= htmlspecialchars($b['primary_contact_name'] ?? 'N/A') ?></td>
+                        <td><?= htmlspecialchars($b['export_region'] ?? '-') ?></td>
+                        <td><?= $b['status'] ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>' ?></td>
+                        <td>
+                            <a href="/buyers/edit/<?= $b['id'] ?>" class="btn btn-sm btn-info">Edit</a>
+                            <a href="/buyers/delete/<?= $b['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">Delete</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; else: ?>
+                    <tr><td colspan="6" class="text-center">No buyers found.</td></tr>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<?php include 'includes/footer.php'; ?>
