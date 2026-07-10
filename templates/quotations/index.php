@@ -62,6 +62,12 @@ $statusClasses = [0 => 'bg-secondary', 1 => 'bg-warning', 2 => 'bg-success', 3 =
                                 <a href="/quotations/<?= (int) $quotation['id'] ?>" class="btn btn-sm btn-outline-secondary">View</a>
                                 <a href="/quotations/<?= (int) $quotation['id'] ?>/edit" class="btn btn-sm btn-outline-primary">Edit</a>
                                 <a href="/quotations/<?= (int) $quotation['id'] ?>/print" class="btn btn-sm btn-outline-dark">Print</a>
+                                <?php if (\App\Core\Session::get('role_name') === 'admin'): ?>
+                                    <form method="post" action="/quotations/<?= (int) $quotation['id'] ?>/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete this Quotation?');">
+                                        <?= csrfToken() ?>
+                                        <button class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
