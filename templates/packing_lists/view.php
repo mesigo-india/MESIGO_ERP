@@ -48,7 +48,7 @@ $company = $dbInst->query("SELECT * FROM company WHERE status = 1 ORDER BY id AS
         </div>
         
         <form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/email" class="d-inline"><?= csrfToken() ?><button class="btn btn-outline-info btn-sm"><i class="fas fa-envelope me-1"></i> Email</button></form>
-        <?php if (Session::get('role_name') === 'admin'): ?>
+        <?php if (\App\Core\Session::get('role_name') === 'admin'): ?>
             <form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete this Packing List?');">
                 <?= csrfToken() ?>
                 <button class="btn btn-danger btn-sm"><i class="fas fa-trash-alt me-1"></i> Delete</button>

@@ -19,7 +19,7 @@ $statusClasses = [0 => 'bg-secondary', 1 => 'bg-info', 2 => 'bg-success', 6 => '
     <div class="btn-group">
         <a href="/export-documents" class="btn btn-outline-secondary">Back to Vault</a>
         <button onclick="window.print()" class="btn btn-outline-dark">Print</button>
-        <?php if (Session::get('role_name') === 'admin'): ?>
+        <?php if (\App\Core\Session::get('role_name') === 'admin'): ?>
             <form method="post" action="/non-hazardous-certs/<?= (int) ($certificate['id'] ?? 0) ?>/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete this Non-Hazardous Certificate?');">
                 <?= csrfToken() ?>
                 <button class="btn btn-danger">Delete</button>
