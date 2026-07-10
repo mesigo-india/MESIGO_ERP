@@ -17,6 +17,9 @@ abstract class Controller
     {
         $this->auth = new Auth(Database::getInstance());
         $this->logger = new Logger();
+        if ($this->auth->isLoggedIn()) {
+            $this->auth->user();
+        }
     }
     
     /**

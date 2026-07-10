@@ -132,11 +132,25 @@ class Auth
             return null;
         }
         
+        $roleName = Session::get('role_name');
+        if ($roleName === null) {
+            $stmt = $this->db->prepare("
+                SELECT r.name 
+                FROM users u 
+                JOIN roles r ON u.role_id = r.id 
+                WHERE u.id = ?
+            ");
+            $stmt->execute([Session::get('user_id')]);
+            $roleName = $stmt->fetchColumn() ?: '';
+            Session::set('role_name', $roleName);
+        }
+        
         return [
             'id' => Session::get('user_id'),
             'username' => Session::get('username'),
             'email' => Session::get('email'),
             'role_id' => Session::get('role_id'),
+            'role_name' => $roleName,
             'permissions' => Session::get('permissions', []),
         ];
     }
@@ -159,6 +173,7 @@ class Auth
         Session::set('username', $user['username']);
         Session::set('email', $user['email']);
         Session::set('role_id', $user['role_id']);
+        Session::set('role_name', $user['role_name'] ?? '');
         Session::set('permissions', $user['permissions']);
         Session::set('authenticated', true);
     }
@@ -172,6 +187,7 @@ class Auth
         Session::remove('username');
         Session::remove('email');
         Session::remove('role_id');
+        Session::remove('role_name');
         Session::remove('permissions');
         Session::remove('authenticated');
         Session::destroy();
