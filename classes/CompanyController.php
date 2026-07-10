@@ -104,6 +104,8 @@ class CompanyController extends Controller
             Response::redirect('/company', 'Company not found.');
         }
 
+        $this->logger->info('Company update post trace', ['post' => $_POST, 'files' => array_keys($_FILES)]);
+
         $data = $this->companyDataFromRequest();
         $errors = $this->validateCompany($data);
         if (!empty($errors)) {
@@ -111,7 +113,7 @@ class CompanyController extends Controller
         }
 
         // Handle file uploads, retaining old values if no new files uploaded, or nullifying if removal is requested
-        if (isset($_POST['remove_logo']) && $_POST['remove_logo'] === '1') {
+        if (!empty($_POST['remove_logo'])) {
             if (!empty($existing['logo_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['logo_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['logo_path']);
             }
@@ -120,7 +122,7 @@ class CompanyController extends Controller
             $data['logo_path'] = $this->handleFileUpload('logo_file', 'logo', $existing['logo_path'] ?? null);
         }
 
-        if (isset($_POST['remove_stamp']) && $_POST['remove_stamp'] === '1') {
+        if (!empty($_POST['remove_stamp'])) {
             if (!empty($existing['stamp_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['stamp_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['stamp_path']);
             }
@@ -129,7 +131,7 @@ class CompanyController extends Controller
             $data['stamp_path'] = $this->handleFileUpload('stamp_file', 'stamp', $existing['stamp_path'] ?? null);
         }
 
-        if (isset($_POST['remove_seal']) && $_POST['remove_seal'] === '1') {
+        if (!empty($_POST['remove_seal'])) {
             if (!empty($existing['seal_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['seal_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['seal_path']);
             }
@@ -138,7 +140,7 @@ class CompanyController extends Controller
             $data['seal_path'] = $this->handleFileUpload('seal_file', 'seal', $existing['seal_path'] ?? null);
         }
 
-        if (isset($_POST['remove_signature']) && $_POST['remove_signature'] === '1') {
+        if (!empty($_POST['remove_signature'])) {
             if (!empty($existing['signature_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['signature_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['signature_path']);
             }
@@ -147,7 +149,7 @@ class CompanyController extends Controller
             $data['signature_path'] = $this->handleFileUpload('signature_file', 'sig', $existing['signature_path'] ?? null);
         }
 
-        if (isset($_POST['remove_digital_signature']) && $_POST['remove_digital_signature'] === '1') {
+        if (!empty($_POST['remove_digital_signature'])) {
             if (!empty($existing['digital_signature_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['digital_signature_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['digital_signature_path']);
             }
@@ -156,7 +158,7 @@ class CompanyController extends Controller
             $data['digital_signature_path'] = $this->handleFileUpload('digital_signature_file', 'dig_sig', $existing['digital_signature_path'] ?? null);
         }
 
-        if (isset($_POST['remove_letterhead']) && $_POST['remove_letterhead'] === '1') {
+        if (!empty($_POST['remove_letterhead'])) {
             if (!empty($existing['letterhead_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_path']);
             }
@@ -165,7 +167,7 @@ class CompanyController extends Controller
             $data['letterhead_path'] = $this->handleFileUpload('letterhead_file', 'lh', $existing['letterhead_path'] ?? null);
         }
 
-        if (isset($_POST['remove_letterhead_export']) && $_POST['remove_letterhead_export'] === '1') {
+        if (!empty($_POST['remove_letterhead_export'])) {
             if (!empty($existing['letterhead_export_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_export_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_export_path']);
             }
@@ -174,7 +176,7 @@ class CompanyController extends Controller
             $data['letterhead_export_path'] = $this->handleFileUpload('letterhead_export_file', 'lh_exp', $existing['letterhead_export_path'] ?? null);
         }
 
-        if (isset($_POST['remove_letterhead_domestic']) && $_POST['remove_letterhead_domestic'] === '1') {
+        if (!empty($_POST['remove_letterhead_domestic'])) {
             if (!empty($existing['letterhead_domestic_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_domestic_path'])) {
                 @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_domestic_path']);
             }
