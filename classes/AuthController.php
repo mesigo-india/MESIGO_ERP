@@ -58,10 +58,9 @@ class AuthController extends Controller
         try {
             $user = $this->auth->authenticate($username, $password);
         } catch (Exception $e) {
-            $this->logger->error('Login failed due to system error', ['error' => $e->getMessage()]);
             $this->renderAuth('login', [
                 'title' => 'Login',
-                'errors' => ['Unable to process login at this time.'],
+                'errors' => [$e->getMessage()],
                 'username' => $username,
             ]);
             return;

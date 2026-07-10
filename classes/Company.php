@@ -29,8 +29,21 @@ class Company
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO company (company_name, address, contact_person, email, phone, gst_number, iec_code, status, created_at)
-            VALUES (:company_name, :address, :contact_person, :email, :phone, :gst_number, :iec_code, :status, NOW())
+            INSERT INTO company (
+                company_name, address, contact_person, email, phone, website,
+                gst_number, iec_code, pan_number, cin_number, apeda_number, fssai_number, iso_number, haccp_number,
+                bank_name, account_name, account_number, ifsc_code, swift_code,
+                logo_path, stamp_path, seal_path, signature_path, digital_signature_path,
+                letterhead_type, letterhead_path, letterhead_export_path, letterhead_domestic_path,
+                declaration, status, created_at
+            ) VALUES (
+                :company_name, :address, :contact_person, :email, :phone, :website,
+                :gst_number, :iec_code, :pan_number, :cin_number, :apeda_number, :fssai_number, :iso_number, :haccp_number,
+                :bank_name, :account_name, :account_number, :ifsc_code, :swift_code,
+                :logo_path, :stamp_path, :seal_path, :signature_path, :digital_signature_path,
+                :letterhead_type, :letterhead_path, :letterhead_export_path, :letterhead_domestic_path,
+                :declaration, :status, NOW()
+            )
         ");
 
         $stmt->execute($this->payload($data));
@@ -45,8 +58,13 @@ class Company
         $stmt = $this->db->prepare("
             UPDATE company
             SET company_name = :company_name, address = :address, contact_person = :contact_person,
-                email = :email, phone = :phone, gst_number = :gst_number, iec_code = :iec_code,
-                status = :status, updated_at = NOW()
+                email = :email, phone = :phone, website = :website,
+                gst_number = :gst_number, iec_code = :iec_code, pan_number = :pan_number, cin_number = :cin_number,
+                apeda_number = :apeda_number, fssai_number = :fssai_number, iso_number = :iso_number, haccp_number = :haccp_number,
+                bank_name = :bank_name, account_name = :account_name, account_number = :account_number, ifsc_code = :ifsc_code, swift_code = :swift_code,
+                logo_path = :logo_path, stamp_path = :stamp_path, seal_path = :seal_path, signature_path = :signature_path, digital_signature_path = :digital_signature_path,
+                letterhead_type = :letterhead_type, letterhead_path = :letterhead_path, letterhead_export_path = :letterhead_export_path, letterhead_domestic_path = :letterhead_domestic_path,
+                declaration = :declaration, status = :status, updated_at = NOW()
             WHERE id = :id
         ");
 
@@ -61,7 +79,7 @@ class Company
 
     private function payload(array $data): array
     {
-        $payload = [
+        return [
             'company_name' => $data['company_name'],
             'address' => json_encode([
                 'line1' => $data['address_line1'] ?? '',
@@ -74,11 +92,36 @@ class Company
             'contact_person' => $data['contact_person'] ?? null,
             'email' => $data['email'] ?? null,
             'phone' => $data['phone'] ?? null,
+            'website' => $data['website'] ?? null,
+            
             'gst_number' => $data['gst_number'] ?? null,
             'iec_code' => $data['iec_code'] ?? null,
+            'pan_number' => $data['pan_number'] ?? null,
+            'cin_number' => $data['cin_number'] ?? null,
+            'apeda_number' => $data['apeda_number'] ?? null,
+            'fssai_number' => $data['fssai_number'] ?? null,
+            'iso_number' => $data['iso_number'] ?? null,
+            'haccp_number' => $data['haccp_number'] ?? null,
+            
+            'bank_name' => $data['bank_name'] ?? null,
+            'account_name' => $data['account_name'] ?? null,
+            'account_number' => $data['account_number'] ?? null,
+            'ifsc_code' => $data['ifsc_code'] ?? null,
+            'swift_code' => $data['swift_code'] ?? null,
+            
+            'logo_path' => $data['logo_path'] ?? null,
+            'stamp_path' => $data['stamp_path'] ?? null,
+            'seal_path' => $data['seal_path'] ?? null,
+            'signature_path' => $data['signature_path'] ?? null,
+            'digital_signature_path' => $data['digital_signature_path'] ?? null,
+            
+            'letterhead_type' => $data['letterhead_type'] ?? 'plain',
+            'letterhead_path' => $data['letterhead_path'] ?? null,
+            'letterhead_export_path' => $data['letterhead_export_path'] ?? null,
+            'letterhead_domestic_path' => $data['letterhead_domestic_path'] ?? null,
+            
+            'declaration' => $data['declaration'] ?? null,
             'status' => (int) ($data['status'] ?? 1),
         ];
-
-        return $payload;
     }
 }

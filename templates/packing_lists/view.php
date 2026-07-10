@@ -6,174 +6,165 @@ $statuses = $statuses ?? [];
 $revisions = $revisions ?? [];
 $history = $history ?? [];
 $statusClasses = [0 => 'bg-secondary', 2 => 'bg-success', 4 => 'bg-info', 5 => 'bg-primary', 6 => 'bg-danger'];
+
+$dbInst = App\Core\Database::getInstance();
+$company = $dbInst->query("SELECT * FROM company WHERE status = 1 ORDER BY id ASC LIMIT 1")->fetch(\PDO::FETCH_ASSOC) ?: [];
 ?>
 <style>
 @media print {
     .no-print { display: none !important; }
-    .card { border: 0; }
-    .page-header { display: none; }
+    .card { border: 0 !important; box-shadow: none !important; }
+    .page-header { display: none !important; }
 }
 </style>
 
-<div class="page-header no-print d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h2 text-primary font-weight-bold mb-0"><?= escapeHtml($quotation['document_number'] ?? '') ?></h1>
-    <div class="btn-group">
-        <a href="/packing-lists" class="btn btn-outline-secondary">Back to List</a>
-        <a href="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/edit" class="btn btn-outline-primary">Edit Packing List</a>
-        <button onclick="window.print()" class="btn btn-outline-dark">Print PL</button>
+<!-- Action Header Control -->
+<div class="page-header no-print d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h4 class="mb-0 fw-bold"><i class="fas fa-pallet text-primary me-2"></i>Packing List <?= escapeHtml($quotation['document_number'] ?? '') ?></h4>
+        <span class="text-muted small">Manage document status, revision history, and printable formats.</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/packing-lists" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+        <a href="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/edit" class="btn btn-outline-primary btn-sm"><i class="fas fa-edit me-1"></i> Edit</a>
+        
+        <!-- Print Selection Dropdown -->
+        <div class="dropdown d-inline-block">
+            <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" id="printDrop" data-bs-toggle="dropdown">
+                <i class="fas fa-print me-1"></i> Print / PDF
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-1">
+                <li><button onclick="triggerPrint('plain')" class="dropdown-item"><i class="fas fa-file-alt me-2 text-muted"></i> Plain Paper Mode</button></li>
+                <?php if (!empty($company['letterhead_path'])): ?>
+                    <li><button onclick="triggerPrint('letterhead', '/uploads/<?= htmlspecialchars($company['letterhead_path']) ?>')" class="dropdown-item"><i class="fas fa-file-image me-2 text-muted"></i> Default Letterhead</button></li>
+                <?php endif; ?>
+                <?php if (!empty($company['letterhead_export_path'])): ?>
+                    <li><button onclick="triggerPrint('letterhead', '/uploads/<?= htmlspecialchars($company['letterhead_export_path']) ?>')" class="dropdown-item"><i class="fas fa-ship me-2 text-muted"></i> Export Letterhead</button></li>
+                <?php endif; ?>
+                <?php if (!empty($company['letterhead_domestic_path'])): ?>
+                    <li><button onclick="triggerPrint('letterhead', '/uploads/<?= htmlspecialchars($company['letterhead_domestic_path']) ?>')" class="dropdown-item"><i class="fas fa-building me-2 text-muted"></i> Domestic Letterhead</button></li>
+                <?php endif; ?>
+            </ul>
+        </div>
+        
+        <form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/email" class="d-inline"><?= csrfToken() ?><button class="btn btn-outline-info btn-sm"><i class="fas fa-envelope me-1"></i> Email</button></form>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-body p-4">
-        <div class="text-center mb-4">
-            <h2 class="font-weight-bold text-dark">PACKING LIST</h2>
-            <div class="text-muted small">Print Ready · Export Manifest</div>
-        </div>
+<!-- Print Container with Overlay letterheads -->
+<div class="letterhead-print-container" id="printContainer">
+    
+    <!-- Print Header -->
+    <?php require_once APP_ROOT . '/includes/document_print_header.php'; ?>
 
-        <div class="row mb-4">
-            <div class="col-md-6 mb-3">
-                <strong>PL Number:</strong> <?= escapeHtml($quotation['document_number'] ?? '') ?><br>
-                <strong>Revision Level:</strong> <?= (int) ($meta['revision'] ?? 0) ?><br>
-                <strong>Date of Issue:</strong> <?= escapeHtml($quotation['document_date'] ?? '') ?><br>
-                <strong>Status:</strong> <span class="badge <?= escapeHtml($statusClasses[(int) ($quotation['status'] ?? 0)] ?? 'bg-secondary') ?>"><?= escapeHtml($statuses[(int) ($quotation['status'] ?? 0)] ?? 'Unknown') ?></span>
+    <div class="letterhead-content-body card border-0">
+        <div class="card-body p-0">
+            <div class="text-center mb-4">
+                <h4 class="fw-bold tracking-wider text-dark mb-0">PACKING LIST</h4>
+                <div class="text-muted small">Official Sourced Manifest & Loading Specification</div>
             </div>
-            <div class="col-md-6 mb-3">
-                <strong>Buyer:</strong> <?= escapeHtml($quotation['buyer_name'] ?? '') ?><br>
-                <strong>Currency:</strong> <?= escapeHtml($quotation['currency_code'] ?? '') ?><br>
-                <strong>Loading Port:</strong> <?= escapeHtml($quotation['loading_port_name'] ?? '') ?><br>
-                <strong>Destination Port:</strong> <?= escapeHtml($quotation['delivery_port_name'] ?? '') ?>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-sm-6">
+                    <span class="d-block small text-muted text-uppercase">Manifest Details</span>
+                    <strong class="d-block text-dark"><?= escapeHtml($quotation['document_number'] ?? '') ?></strong>
+                    <span class="d-block small text-muted">Date: <?= escapeHtml($quotation['document_date'] ?? '') ?></span>
+                    <span class="d-block small text-muted">Revision: Rev <?= (int) ($meta['revision'] ?? 0) ?></span>
+                    <span class="d-block small text-muted">Status: <span class="badge <?= escapeHtml($statusClasses[(int) ($quotation['status'] ?? 0)] ?? 'bg-secondary') ?>"><?= escapeHtml($statuses[(int) ($quotation['status'] ?? 0)] ?? 'Unknown') ?></span></span>
+                </div>
+                <div class="col-6 col-sm-6 text-sm-end">
+                    <span class="d-block small text-muted text-uppercase">Buyer / Client</span>
+                    <strong class="d-block text-dark"><?= escapeHtml($quotation['buyer_name'] ?? '') ?></strong>
+                    <span class="d-block small text-muted">Loading Port: <?= escapeHtml($quotation['loading_port_name'] ?? 'N/A') ?></span>
+                    <span class="d-block small text-muted">Destination Port: <?= escapeHtml($quotation['delivery_port_name'] ?? 'N/A') ?></span>
+                </div>
             </div>
-        </div>
+            
+            <div class="row g-3 mb-4 border-top border-bottom py-2 bg-light">
+                <div class="col-md-6">
+                    <span class="d-block small text-muted text-uppercase fw-semibold">Consignee Address</span>
+                    <p class="text-dark small mb-0"><?= nl2br(escapeHtml($meta['consignee'] ?? 'Same as Buyer')) ?></p>
+                </div>
+                <div class="col-md-6 border-start">
+                    <span class="d-block small text-muted text-uppercase fw-semibold">Notify Party</span>
+                    <p class="text-dark small mb-0"><?= nl2br(escapeHtml($meta['notify_party'] ?? 'Same as Buyer')) ?></p>
+                </div>
+            </div>
 
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <strong>Consignee:</strong><br>
-                <span class="text-muted"><?= nl2br(escapeHtml($meta['consignee'] ?? 'Same as Buyer')) ?></span>
-            </div>
-            <div class="col-md-6">
-                <strong>Notify Party:</strong><br>
-                <span class="text-muted"><?= nl2br(escapeHtml($meta['notify_party'] ?? 'Same as Buyer')) ?></span>
-            </div>
-        </div>
-
-        <div class="table-responsive mb-4">
-            <table class="table table-bordered table-striped align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th style="width: 50px;">#</th>
-                        <th>Product Description</th>
-                        <th>HS Code</th>
-                        <th>Packaging Type</th>
-                        <th class="text-end" style="width: 140px;">Quantity</th>
-                        <th style="width: 100px;">Unit</th>
-                        <th>Package Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($items as $index => $item): ?>
+            <!-- Items table -->
+            <div class="table-responsive mb-4">
+                <table class="table table-bordered align-middle">
+                    <thead>
                         <tr>
-                            <td><?= $index + 1 ?></td>
-                            <td><?= escapeHtml($item['product_name'] ?? '') ?></td>
-                            <td><?= escapeHtml($item['hsn_code'] ?? '') ?></td>
-                            <td><?= escapeHtml($item['packing_type_name'] ?? '') ?></td>
-                            <td class="text-end font-weight-bold"><?= number_format((float) ($item['quantity'] ?? 0), 3) ?></td>
-                            <td><?= escapeHtml($item['unit_code'] ?? '') ?></td>
-                            <td>
-                                <strong>Bags:</strong> <?= (int) ($item['no_of_bags'] ?? $item['quantity'] ?? 0) ?><br>
-                                <strong>Net Weight:</strong> <?= number_format((float) ($item['net_weight'] ?? 0.0), 3) ?> kg<br>
-                                <strong>Gross Weight:</strong> <?= number_format((float) ($item['gross_weight'] ?? 0.0), 3) ?> kg
-                            </td>
+                            <th style="width:40px">#</th>
+                            <th>Product Description</th>
+                            <th>HS Code</th>
+                            <th>Packaging Type</th>
+                            <th class="text-end">Quantity</th>
+                            <th>Unit</th>
+                            <th>Package / Weight Details</th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="row">
-            <div class="col-md-12 mb-3">
-                <strong>General Remarks & Instructions:</strong><br>
-                <div class="p-2 border rounded bg-light" style="min-height: 80px;">
-                    <?= nl2br(escapeHtml($quotation['remarks'] ?? '')) ?>
-                </div>
-            </div>
-        </div>
-
-        <?php if (!empty($quotation['estimated_containers_json'])): ?>
-            <?php $containers = json_decode($quotation['estimated_containers_json'], true); ?>
-            <?php if (!empty($containers)): ?>
-                <div class="mt-4 p-3 bg-light rounded border border-warning">
-                    <h5 class="text-warning font-weight-bold"><i class="fa fa-ship"></i> Container Loading Recommendation</h5>
-                    <div class="row">
-                        <?php foreach ($containers as $c): ?>
-                            <div class="col-md-4 mb-2">
-                                <div class="card shadow-sm border-0 p-3 bg-white">
-                                    <strong>Type:</strong> <?= escapeHtml($c['container_type']) ?><br>
-                                    <strong>Quantity Recommended:</strong> <span class="badge bg-primary fs-6"><?= (int) $c['container_count'] ?></span><br>
-                                    <strong>Estimated Utilization:</strong> <?= number_format($c['utilization_percent'], 1) ?>%<br>
-                                    <strong>Total CBM:</strong> <?= number_format($c['total_volume_cbm'], 2) ?> m³ / <strong>Total Weight:</strong> <?= number_format($c['total_weight_kg'] / 1000, 2) ?> MT
-                                </div>
-                            </div>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($items as $index => $item): ?>
+                            <tr>
+                                <td><?= $index + 1 ?></td>
+                                <td class="fw-semibold text-dark"><?= escapeHtml($item['product_name'] ?? '') ?></td>
+                                <td><?= escapeHtml($item['hsn_code'] ?? '') ?></td>
+                                <td><?= escapeHtml($item['packing_type_name'] ?? '') ?></td>
+                                <td class="text-end fw-bold"><?= number_format((float) ($item['quantity'] ?? 0), 3) ?></td>
+                                <td><?= escapeHtml($item['unit_code'] ?? '') ?></td>
+                                <td class="small text-muted">
+                                    <strong>Bags count:</strong> <?= (int) ($item['no_of_bags'] ?? $item['quantity'] ?? 0) ?><br>
+                                    <strong>Net Weight:</strong> <?= number_format((float) ($item['net_weight'] ?? 0.0), 3) ?> kg<br>
+                                    <strong>Gross Weight:</strong> <?= number_format((float) ($item['gross_weight'] ?? 0.0), 3) ?> kg
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endif; ?>
-        <?php endif; ?>
-    </div>
-</div>
-
-<div class="row mt-3 no-print">
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="font-weight-bold text-secondary mb-3">Revision History</h5>
-                <div style="max-height: 200px; overflow-y: auto;">
-                    <?php foreach ($revisions as $revision): ?>
-                        <div class="mb-2 border-bottom pb-1">
-                            <strong>Rev <?= (int) $revision['revision_number'] ?></strong> <span class="text-muted text-xs">(<?= escapeHtml($revision['created_at']) ?>)</span><br>
-                            <span class="text-sm"><?= escapeHtml($revision['revision_notes'] ?? 'No notes') ?></span>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                <form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/revise" class="mt-3">
-                    <?= csrfToken() ?>
-                    <input type="text" name="revision_notes" class="form-control mb-2" placeholder="Describe this revision version..." required>
-                    <button class="btn btn-sm btn-primary">Create New Snapshot</button>
-                </form>
+                    </tbody>
+                </table>
             </div>
+            
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <strong class="text-dark small">Notes / Remarks:</strong>
+                    <p class="text-muted small mt-1"><?= nl2br(escapeHtml($quotation['remarks'] ?? 'No special instructions.')) ?></p>
+                </div>
+            </div>
+            
+            <!-- Containers Recomendation -->
+            <?php if (!empty($quotation['estimated_containers_json'])): ?>
+                <?php $containers = json_decode($quotation['estimated_containers_json'], true); ?>
+                <?php if (!empty($containers)): ?>
+                    <div class="mt-4 p-3 bg-light rounded border border-warning">
+                        <h6 class="text-warning fw-bold"><i class="fa fa-ship"></i> Container Loading Recommendations</h6>
+                        <div class="row g-3 mt-1">
+                            <?php foreach ($containers as $c): ?>
+                                <div class="col-md-4">
+                                    <div class="card shadow-sm border-0 p-3 bg-white">
+                                        <span class="d-block small text-muted">Container Allocation</span>
+                                        <strong class="d-block text-dark"><?= escapeHtml($c['container_type']) ?></strong>
+                                        <span class="d-block small">Qty: <span class="badge bg-primary"><?= (int) $c['container_count'] ?></span></span>
+                                        <span class="d-block small">Util: <?= number_format($c['utilization_percent'], 1) ?>%</span>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
         </div>
     </div>
     
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="font-weight-bold text-secondary mb-3">Status Workflow & Approvals</h5>
-                <form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/status" class="row g-2 align-items-center">
-                    <?= csrfToken() ?>
-                    <div class="col-md-5">
-                        <select name="status" class="form-select select2-init">
-                            <?php foreach ($statuses as $statusId => $statusName): ?>
-                                <option value="<?= (int) $statusId ?>" <?= (int) ($quotation['status'] ?? 0) === (int) $statusId ? 'selected' : '' ?>><?= escapeHtml($statusName) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-5">
-                        <input type="text" name="remarks" class="form-control" placeholder="Audit remarks..." required>
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-primary w-100">Update</button>
-                    </div>
-                </form>
-                <div class="mt-3" style="max-height: 200px; overflow-y: auto;">
-                    <?php foreach ($history as $entry): ?>
-                        <div class="small text-muted mb-1 border-bottom pb-1">
-                            <strong><?= escapeHtml($entry['created_at']) ?></strong>: Changed to 
-                            <span class="badge bg-secondary"><?= escapeHtml($statuses[(int) $entry['new_status']] ?? 'Unknown') ?></span>
-                            <em>"<?= escapeHtml($entry['remarks'] ?? '') ?>"</em>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
+    <!-- Print Footer -->
+    <?php require_once APP_ROOT . '/includes/document_print_footer.php'; ?>
+</div>
+
+<div class="row mt-4 no-print border-top pt-4">
+    <div class="col-md-6 mb-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><h5>Revision History</h5><?php foreach ($revisions as $revision): ?><div class="small mb-1">Rev <?= (int) $revision['revision_number'] ?> - <?= escapeHtml($revision['created_at']) ?> - <?= escapeHtml($revision['revision_notes'] ?? '') ?></div><?php endforeach; ?><form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/revise" class="mt-2"><?= csrfToken() ?><input type="text" name="revision_notes" class="form-control mb-2" placeholder="Revision notes"><button class="btn btn-sm btn-primary">Save Revision</button></form></div></div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><h5>Status Workflow</h5><form method="post" action="/packing-lists/<?= (int) ($quotation['id'] ?? 0) ?>/status" class="row g-2"><?= csrfToken() ?><div class="col-md-5"><select name="status" class="form-select"><?php foreach ($statuses as $statusId => $statusName): ?><option value="<?= (int) $statusId ?>" <?= (int) ($quotation['status'] ?? 0) === (int) $statusId ? 'selected' : '' ?>><?= escapeHtml($statusName) ?></option><?php endforeach; ?></select></div><div class="col-md-5"><input type="text" name="remarks" class="form-control" placeholder="Status remarks"></div><div class="col-md-2"><button class="btn btn-primary">Update</button></div></form><?php foreach ($history as $entry): ?><div class="small text-muted mt-2"><?= escapeHtml($entry['created_at']) ?>: <?= escapeHtml($statuses[(int) $entry['new_status']] ?? 'Unknown') ?> <?= escapeHtml($entry['remarks'] ?? '') ?></div><?php endforeach; ?></div></div>
     </div>
 </div>

@@ -19,6 +19,8 @@ $router->get('/reset-password/{token}', 'AuthController@showResetPassword');
 $router->post('/reset-password', 'AuthController@resetPassword');
 
 // User Management Routes
+$router->get('/profile', 'UserController@showProfile');
+$router->post('/profile', 'UserController@updateProfile');
 $router->get('/users', 'UserController@index');
 $router->get('/users/create', 'UserController@create');
 $router->post('/users', 'UserController@store');

@@ -271,4 +271,119 @@ class UserController extends Controller
             'status'     => (int) ($_POST['status'] ?? 1),
         ];
     }
+
+    public function showProfile(): void
+    {
+        $this->requireLogin();
+        $userId = $this->auth->id();
+
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ? AND deleted_at IS NULL");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            Response::redirect('/dashboard', 'User profile not found.');
+        }
+
+        $this->render('auth/profile', [
+            'title' => 'My Profile',
+            'user'  => $user,
+        ]);
+    }
+
+    public function updateProfile(): void
+    {
+        $this->requireLogin();
+        if (!$this->validateCsrf()) {
+            Response::redirect('/profile', 'Invalid security token.');
+        }
+
+        $userId = $this->auth->id();
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ? AND deleted_at IS NULL");
+        $stmt->execute([$userId]);
+        $existing = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$existing) {
+            Response::redirect('/dashboard', 'User profile not found.');
+        }
+
+        $email = trim((string) ($_POST['email'] ?? ''));
+        $first_name = trim((string) ($_POST['first_name'] ?? ''));
+        $last_name = trim((string) ($_POST['last_name'] ?? ''));
+        $phone = trim((string) ($_POST['phone'] ?? ''));
+        $language = trim((string) ($_POST['language'] ?? 'en'));
+        $timezone = trim((string) ($_POST['timezone'] ?? 'Asia/Kolkata'));
+        $password = (string) ($_POST['password'] ?? '');
+
+        if ($email === '' || $first_name === '' || $last_name === '') {
+            Response::redirect('/profile', 'First name, last name, and email are required.');
+        }
+
+        if ($this->emailExists($email, $userId)) {
+            Response::redirect('/profile', 'This email is already in use by another account.');
+        }
+
+        // Upload files
+        $photoPath = $this->handleProfileUpload('photo_file', 'avatar', $existing['photo_path'] ?? null);
+        $signaturePath = $this->handleProfileUpload('signature_file', 'user_sig', $existing['signature_path'] ?? null);
+
+        $params = [
+            ':email' => $email,
+            ':first_name' => $first_name,
+            ':last_name' => $last_name,
+            ':phone' => $phone,
+            ':language' => $language,
+            ':timezone' => $timezone,
+            ':photo_path' => $photoPath,
+            ':signature_path' => $signaturePath,
+            ':id' => $userId,
+        ];
+
+        $passSql = "";
+        if ($password !== '') {
+            if (strlen($password) < 8) {
+                Response::redirect('/profile', 'Password must be at least 8 characters long.');
+            }
+            $passSql = ", password = :password";
+            $params[':password'] = password_hash($password, PASSWORD_BCRYPT);
+        }
+
+        $updateStmt = $this->db->prepare("
+            UPDATE users 
+            SET email = :email, first_name = :first_name, last_name = :last_name,
+                phone = :phone, language = :language, timezone = :timezone,
+                photo_path = :photo_path, signature_path = :signature_path
+                {$passSql}
+            WHERE id = :id
+        ");
+
+        if ($updateStmt->execute($params)) {
+            Session::set('email', $email);
+            $this->logger->info('User updated profile', ['user_id' => $userId]);
+            Response::redirect('/profile', 'Profile updated successfully.');
+        } else {
+            Response::redirect('/profile', 'Failed to update profile.');
+        }
+    }
+
+    private function handleProfileUpload(string $fieldName, string $prefix, ?string $existingPath = null): ?string
+    {
+        if (isset($_FILES[$fieldName]) && $_FILES[$fieldName]['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = APP_ROOT . '/uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0775, true);
+            }
+            $originalName = basename($_FILES[$fieldName]['name']);
+            $extension = pathinfo($originalName, PATHINFO_EXTENSION);
+            $fileName = $prefix . '_' . uniqid() . '.' . $extension;
+            $targetPath = $uploadDir . $fileName;
+            if (move_uploaded_file($_FILES[$fieldName]['tmp_name'], $targetPath)) {
+                if ($existingPath && file_exists($uploadDir . $existingPath)) {
+                    @unlink($uploadDir . $existingPath);
+                }
+                return $fileName;
+            }
+        }
+        return $existingPath;
+    }
 }

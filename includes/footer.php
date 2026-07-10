@@ -1,14 +1,15 @@
                 </div>
             </main>
             
-            <footer class="footer bg-light py-3">
+            <footer class="footer bg-white border-top py-3 d-print-none mt-auto">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <span class="text-muted">&copy; <?= date('Y') ?> MESIGO INDIA PRIVATE LIMITED. All rights reserved.</span>
+                    <div class="row align-items-center">
+                        <div class="col-md-6 text-center text-md-start">
+                            <span class="text-muted small">&copy; <?= date('Y') ?> <strong>MESIGO INDIA PRIVATE LIMITED</strong>. Enterprise Resource Planning Edition.</span>
                         </div>
-                        <div class="col-md-6 text-end">
-                            <span class="text-muted">Version 1.0.0</span>
+                        <div class="col-md-6 text-center text-md-end mt-2 mt-md-0">
+                            <span class="badge bg-light text-secondary border py-2">System Version 2.0.0</span>
+                            <span class="badge bg-light text-success border py-2 ms-2"><i class="fas fa-circle-notch fa-spin me-1 text-success"></i> Cloud Node Connected</span>
                         </div>
                     </div>
                 </div>
@@ -35,5 +36,14 @@
     <!-- Toastr for notifications -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    
+    <!-- Sidebar Toggle Event Script -->
+    <script>
+        $(document).ready(function() {
+            $('#sidebarToggle').on('click', function() {
+                $('.sidebar').toggleClass('show');
+            });
+        });
+    </script>
 </body>
 </html>

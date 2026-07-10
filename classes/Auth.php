@@ -26,10 +26,6 @@ class Auth
      */
     public function authenticate(string $username, string $password): ?array
     {
-        if ($this->isRateLimited()) {
-            return null;
-        }
-
         $stmt = $this->db->prepare("
             SELECT u.*, r.name as role_name, r.permissions 
             FROM {$this->table} u 
@@ -42,17 +38,31 @@ class Auth
         $stmt->execute(['username' => $username, 'email' => $username]);
         $user = $stmt->fetch();
         
+        if ($user) {
+            if ($user['locked_until'] && strtotime($user['locked_until']) > time()) {
+                $seconds = strtotime($user['locked_until']) - time();
+                $minutes = (int)ceil($seconds / 60);
+                throw new Exception("This account is temporarily locked. Please try again in {$minutes} minutes.");
+            }
+        }
+
+        if ($this->isRateLimited()) {
+            throw new Exception("Too many failed login attempts from this network. Please try again later.");
+        }
+        
         if (!$user) {
             $this->logFailedLogin(null);
             return null;
         }
         
         if (!password_verify($password, $user['password'])) {
-            $this->logFailedLogin($user['id']);
+            $this->logFailedLogin((int)$user['id']);
+            $this->incrementFailedAttempts((int)$user['id'], (int)$user['failed_attempts']);
             return null;
         }
         
-        $this->logSuccessfulLogin($user['id']);
+        $this->logSuccessfulLogin((int)$user['id']);
+        $this->resetFailedAttempts((int)$user['id']);
         
         return [
             'id' => $user['id'],
@@ -64,6 +74,24 @@ class Auth
             'role_name' => $user['role_name'],
             'permissions' => json_decode($user['permissions'] ?? '[]', true) ?: [],
         ];
+    }
+
+    private function incrementFailedAttempts(int $userId, int $currentAttempts): void
+    {
+        $newAttempts = $currentAttempts + 1;
+        $lockedUntil = null;
+        if ($newAttempts >= $this->maxLoginAttempts) {
+            $lockedUntil = date('Y-m-d H:i:s', time() + $this->lockoutSeconds);
+        }
+        
+        $stmt = $this->db->prepare("UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?");
+        $stmt->execute([$newAttempts, $lockedUntil, $userId]);
+    }
+    
+    private function resetFailedAttempts(int $userId): void
+    {
+        $stmt = $this->db->prepare("UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?");
+        $stmt->execute([$userId]);
     }
 
     /**

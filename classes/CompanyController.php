@@ -55,6 +55,16 @@ class CompanyController extends Controller
             Response::redirect('/company/create', $this->formatValidationErrors($errors));
         }
 
+        // Handle file uploads
+        $data['logo_path'] = $this->handleFileUpload('logo_file', 'logo');
+        $data['stamp_path'] = $this->handleFileUpload('stamp_file', 'stamp');
+        $data['seal_path'] = $this->handleFileUpload('seal_file', 'seal');
+        $data['signature_path'] = $this->handleFileUpload('signature_file', 'sig');
+        $data['digital_signature_path'] = $this->handleFileUpload('digital_signature_file', 'dig_sig');
+        $data['letterhead_path'] = $this->handleFileUpload('letterhead_file', 'lh');
+        $data['letterhead_export_path'] = $this->handleFileUpload('letterhead_export_file', 'lh_exp');
+        $data['letterhead_domestic_path'] = $this->handleFileUpload('letterhead_domestic_file', 'lh_dom');
+
         $id = $this->company->create($data);
         $this->logger->info('Company created', ['company_id' => $id]);
         Response::redirect('/company', 'Company created successfully.');
@@ -89,15 +99,26 @@ class CompanyController extends Controller
             Response::redirect('/company/' . (int) $id . '/edit', 'Invalid security token.');
         }
 
+        $existing = $this->company->findById((int) $id);
+        if (!$existing) {
+            Response::redirect('/company', 'Company not found.');
+        }
+
         $data = $this->companyDataFromRequest();
         $errors = $this->validateCompany($data);
         if (!empty($errors)) {
             Response::redirect('/company/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
 
-        if (!$this->company->findById((int) $id)) {
-            Response::redirect('/company', 'Company not found.');
-        }
+        // Handle file uploads, retaining old values if no new files uploaded
+        $data['logo_path'] = $this->handleFileUpload('logo_file', 'logo', $existing['logo_path'] ?? null);
+        $data['stamp_path'] = $this->handleFileUpload('stamp_file', 'stamp', $existing['stamp_path'] ?? null);
+        $data['seal_path'] = $this->handleFileUpload('seal_file', 'seal', $existing['seal_path'] ?? null);
+        $data['signature_path'] = $this->handleFileUpload('signature_file', 'sig', $existing['signature_path'] ?? null);
+        $data['digital_signature_path'] = $this->handleFileUpload('digital_signature_file', 'dig_sig', $existing['digital_signature_path'] ?? null);
+        $data['letterhead_path'] = $this->handleFileUpload('letterhead_file', 'lh', $existing['letterhead_path'] ?? null);
+        $data['letterhead_export_path'] = $this->handleFileUpload('letterhead_export_file', 'lh_exp', $existing['letterhead_export_path'] ?? null);
+        $data['letterhead_domestic_path'] = $this->handleFileUpload('letterhead_domestic_file', 'lh_dom', $existing['letterhead_domestic_path'] ?? null);
 
         $this->company->update((int) $id, $data);
         $this->logger->info('Company updated', ['company_id' => (int) $id]);
@@ -118,6 +139,28 @@ class CompanyController extends Controller
         Response::redirect('/company', 'Company disabled successfully.');
     }
 
+    private function handleFileUpload(string $fieldName, string $prefix, ?string $existingPath = null): ?string
+    {
+        if (isset($_FILES[$fieldName]) && $_FILES[$fieldName]['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = APP_ROOT . '/uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0775, true);
+            }
+            $originalName = basename($_FILES[$fieldName]['name']);
+            $extension = pathinfo($originalName, PATHINFO_EXTENSION);
+            $fileName = $prefix . '_' . uniqid() . '.' . $extension;
+            $targetPath = $uploadDir . $fileName;
+            if (move_uploaded_file($_FILES[$fieldName]['tmp_name'], $targetPath)) {
+                // Delete old file if exists
+                if ($existingPath && file_exists($uploadDir . $existingPath)) {
+                    @unlink($uploadDir . $existingPath);
+                }
+                return $fileName;
+            }
+        }
+        return $existingPath;
+    }
+
     private function companyDataFromRequest(): array
     {
         return [
@@ -125,8 +168,26 @@ class CompanyController extends Controller
             'contact_person' => trim((string) ($_POST['contact_person'] ?? '')),
             'email' => trim((string) ($_POST['email'] ?? '')),
             'phone' => trim((string) ($_POST['phone'] ?? '')),
+            'website' => trim((string) ($_POST['website'] ?? '')),
+            
             'gst_number' => trim((string) ($_POST['gst_number'] ?? '')),
             'iec_code' => trim((string) ($_POST['iec_code'] ?? '')),
+            'pan_number' => trim((string) ($_POST['pan_number'] ?? '')),
+            'cin_number' => trim((string) ($_POST['cin_number'] ?? '')),
+            'apeda_number' => trim((string) ($_POST['apeda_number'] ?? '')),
+            'fssai_number' => trim((string) ($_POST['fssai_number'] ?? '')),
+            'iso_number' => trim((string) ($_POST['iso_number'] ?? '')),
+            'haccp_number' => trim((string) ($_POST['haccp_number'] ?? '')),
+            
+            'bank_name' => trim((string) ($_POST['bank_name'] ?? '')),
+            'account_name' => trim((string) ($_POST['account_name'] ?? '')),
+            'account_number' => trim((string) ($_POST['account_number'] ?? '')),
+            'ifsc_code' => trim((string) ($_POST['ifsc_code'] ?? '')),
+            'swift_code' => trim((string) ($_POST['swift_code'] ?? '')),
+            
+            'letterhead_type' => in_array($_POST['letterhead_type'] ?? '', ['plain', 'image', 'pdf']) ? $_POST['letterhead_type'] : 'plain',
+            'declaration' => trim((string) ($_POST['declaration'] ?? '')),
+            
             'address_line1' => trim((string) ($_POST['address_line1'] ?? '')),
             'address_line2' => trim((string) ($_POST['address_line2'] ?? '')),
             'city' => trim((string) ($_POST['city'] ?? '')),
@@ -144,8 +205,20 @@ class CompanyController extends Controller
             'contact_person' => 'max:255',
             'email' => 'email|max:255',
             'phone' => 'max:20',
+            'website' => 'max:255',
             'gst_number' => 'max:50',
             'iec_code' => 'max:50',
+            'pan_number' => 'max:50',
+            'cin_number' => 'max:50',
+            'apeda_number' => 'max:50',
+            'fssai_number' => 'max:50',
+            'iso_number' => 'max:50',
+            'haccp_number' => 'max:50',
+            'bank_name' => 'max:100',
+            'account_name' => 'max:255',
+            'account_number' => 'max:100',
+            'ifsc_code' => 'max:50',
+            'swift_code' => 'max:50',
             'address_line1' => 'max:255',
             'address_line2' => 'max:255',
             'city' => 'max:100',
@@ -163,7 +236,6 @@ class CompanyController extends Controller
                 $messages[] = $error;
             }
         }
-
         return implode(' ', $messages);
     }
 }
