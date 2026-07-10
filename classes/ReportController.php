@@ -26,6 +26,7 @@ class ReportController extends Controller
             'products' => $this->reports->products(),
             'currencies' => $this->reports->currencies(),
             'summary' => $this->reports->summary($filters),
+            'profitability' => $this->reports->profitabilityReport($filters),
             'exportMode' => trim((string) ($_GET['export'] ?? '')),
         ]);
     }

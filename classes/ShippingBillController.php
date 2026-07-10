@@ -260,9 +260,4 @@ class ShippingBillController extends Controller
         return implode(' ', $messages);
     }
 
-    private function currentUserId(): ?int
-    {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
-    }
 }

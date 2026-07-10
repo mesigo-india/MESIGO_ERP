@@ -6,14 +6,12 @@ namespace App\Core;
 class ProductController extends Controller
 {
     private Product $products;
-    private Validator $validator;
 
     public function __construct()
     {
         parent::__construct();
         require_once APP_ROOT . '/classes/Product.php';
         $this->products = new Product(Database::getInstance());
-        $this->validator = new Validator();
     }
 
     public function index(): void
@@ -21,14 +19,56 @@ class ProductController extends Controller
         $this->requireLogin();
         $this->requirePermission('products.view');
 
-        $search = trim((string) ($_GET['search'] ?? ''));
-        $status = trim((string) ($_GET['status'] ?? ''));
+        $search = trim((string)($_GET['search'] ?? ''));
+        $status = trim((string)($_GET['status'] ?? ''));
+        $filters = [
+            'category_id' => $_GET['category_id'] ?? '',
+            'country_of_origin' => $_GET['country_of_origin'] ?? ''
+        ];
+
+        $sort        = $_GET['sort']        ?? 'name';
+        $dir         = strtoupper($_GET['dir'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+        $page        = max(1, (int)($_GET['page'] ?? 1));
+        $limit       = 50;
+        $offset      = ($page - 1) * $limit;
+
+        // ── Export: CSV / PDF / Print ───────────────────────────────────────────────
+        $exportType = $_GET['export'] ?? '';
+        if (in_array($exportType, ['csv', 'pdf', 'print'])) {
+            $exportProducts = $this->products->getAll($search, $status, 10000, 0, $filters);
+            $this->handleExportData($exportType, 'Product Master', 'Products', $exportProducts, [
+                'Product Code'      => 'product_code',
+                'Name'              => 'name',
+                'HS Code'           => 'hsn_code',
+                'Category'          => 'category_name',
+                'Origin'            => 'country_name', // Updated to country_name in next step
+                'Purchase Price'    => 'purchase_price',
+                'Selling Price'     => 'selling_price',
+                'Currency'          => 'default_currency',
+                'Opening Stock'     => 'opening_stock',
+                'Status'            => function($p) { return ($p['status'] ?? 1) == 1 ? 'Active' : 'Inactive'; }
+            ]);
+        }
+
+        $list = $this->products->getAll($search, $status, $limit, $offset, $filters);
+        $total = $this->products->getTotalCount($search, $status, $filters);
+        $totalPages = ceil($total / $limit) ?: 1;
+
+        $stats = $this->products->getDashboardStats();
 
         $this->render('products/index', [
-            'title' => 'Products',
-            'products' => $this->products->getAll($search, $status),
-            'search' => $search,
-            'status' => $status,
+            'title'      => 'Export Product Master',
+            'products'   => $list,
+            'search'     => $search,
+            'status'     => $status,
+            'filters'    => $filters,
+            'stats'      => $stats,
+            'sort'       => $sort,
+            'dir'        => $dir,
+            'page'       => $page,
+            'totalPages' => $totalPages,
+            'totalRows'  => $total,
+            'categories' => $this->products->productCategories(),
         ]);
     }
 
@@ -36,8 +76,20 @@ class ProductController extends Controller
     {
         $this->requireLogin();
         $this->requirePermission('products.create');
+        Session::generateCsrfToken();
 
-        $this->renderForm('Add Product', null, [], [[]], '/products');
+        $product = [];
+        if (!empty($_GET['duplicate_from'])) {
+            $src = $this->products->findById((int)$_GET['duplicate_from']);
+            if ($src) {
+                $product = $src;
+                $product['product_code'] = 'COPY-' . $src['product_code'];
+            }
+        } else {
+            $product['product_code'] = $this->products->getNextProductCode();
+        }
+
+        $this->renderForm(empty($_GET['duplicate_from']) ? 'Add Product' : 'Duplicate Product', $product, [], '/products');
     }
 
     public function store(): void
@@ -45,7 +97,17 @@ class ProductController extends Controller
         $this->requireLogin();
         $this->requirePermission('products.create');
 
+        if (isset($_POST['ajax_action'])) {
+            if ($_POST['ajax_action'] === 'add_city') {
+                $this->ajaxAddCity();
+            } elseif ($_POST['ajax_action'] === 'get_cities') {
+                $this->ajaxGetCities();
+            }
+            return;
+        }
+
         if (!$this->validateCsrf()) {
+            $_SESSION['product_form_data'] = $_POST;
             Response::redirect('/products/create', 'Invalid security token.');
         }
 
@@ -54,10 +116,14 @@ class ProductController extends Controller
 
         $errors = $this->validateProduct($data);
         if (!empty($errors)) {
-            Response::redirect('/products/create', $this->formatValidationErrors($errors));
+            $_SESSION['product_form_data'] = $_POST;
+            $_SESSION['product_form_errors'] = $errors;
+            Response::redirect('/products/create', 'Please correct the highlighted errors.');
         }
 
-        if ($this->products->findByCode($data['product_code'])) {
+        if ($this->products->existsByCode($data['product_code'])) {
+            $_SESSION['product_form_data'] = $_POST;
+            $_SESSION['product_form_errors'] = ['product_code' => 'Product code already exists.'];
             Response::redirect('/products/create', 'Product code already exists.');
         }
 
@@ -70,19 +136,22 @@ class ProductController extends Controller
     {
         $this->requireLogin();
         $this->requirePermission('products.update');
+        Session::generateCsrfToken();
 
         $product = $this->products->findById((int) $id);
         if (!$product) {
             Response::redirect('/products', 'Product not found.');
         }
 
-        $this->renderForm(
-            'Edit Product',
-            $product,
-            $this->products->decodeMeta($product['description'] ?? null),
-            $this->products->getPackaging((int) $id) ?: [[]],
-            '/products/' . (int) $id
-        );
+        $errors = $_SESSION['product_form_errors'] ?? [];
+        unset($_SESSION['product_form_errors']);
+
+        if (isset($_SESSION['product_form_data'])) {
+            $product = array_merge($product, $_SESSION['product_form_data']);
+            unset($_SESSION['product_form_data']);
+        }
+
+        $this->renderForm('Edit Product', $product, $errors, '/products/' . (int) $id);
     }
 
     public function update(string $id): void
@@ -90,7 +159,17 @@ class ProductController extends Controller
         $this->requireLogin();
         $this->requirePermission('products.update');
 
+        if (isset($_POST['ajax_action'])) {
+            if ($_POST['ajax_action'] === 'add_city') {
+                $this->ajaxAddCity();
+            } elseif ($_POST['ajax_action'] === 'get_cities') {
+                $this->ajaxGetCities();
+            }
+            return;
+        }
+
         if (!$this->validateCsrf()) {
+            $_SESSION['product_form_data'] = $_POST;
             Response::redirect('/products/' . (int) $id . '/edit', 'Invalid security token.');
         }
 
@@ -104,11 +183,14 @@ class ProductController extends Controller
 
         $errors = $this->validateProduct($data);
         if (!empty($errors)) {
-            Response::redirect('/products/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
+            $_SESSION['product_form_data'] = $_POST;
+            $_SESSION['product_form_errors'] = $errors;
+            Response::redirect('/products/' . (int) $id . '/edit', 'Please correct the highlighted errors.');
         }
 
-        $existing = $this->products->findByCode($data['product_code']);
-        if ($existing && (int) $existing['id'] !== (int) $id) {
+        if ($this->products->existsByCode($data['product_code'], (int)$id)) {
+            $_SESSION['product_form_data'] = $_POST;
+            $_SESSION['product_form_errors'] = ['product_code' => 'Product code already exists.'];
             Response::redirect('/products/' . (int) $id . '/edit', 'Product code already exists.');
         }
 
@@ -128,85 +210,140 @@ class ProductController extends Controller
 
         $this->products->delete((int) $id, $this->currentUserId());
         $this->logger->warning('Product disabled', ['product_id' => (int) $id]);
-        Response::redirect('/products', 'Product disabled successfully.');
+        Response::redirect('/products', 'Product deleted successfully.');
     }
 
-    private function renderForm(string $title, ?array $product, array $meta, array $packaging, string $action): void
+    private function renderForm(string $title, array $product, array $errors, string $action): void
     {
+        $db = Database::getInstance();
         $this->render('products/form', [
             'title' => $title,
             'product' => $product,
-            'meta' => $meta,
-            'packaging' => $packaging,
+            'errors' => $errors,
+            'action' => $action,
             'categories' => $this->products->productCategories(),
-            'grades' => $this->products->productGrades(),
             'origins' => $this->products->productOrigins(),
-            'hsCodes' => $this->products->hsCodes(),
             'packingTypes' => $this->products->packingTypes(),
             'units' => $this->products->units(),
-            'action' => $action,
+            'currencies' => $this->getMasterData('currencies', 'code'),
+            'incoterms' => $this->getMasterData('incoterms', 'code'),
+            'countries' => $db->query('SELECT id, name FROM countries ORDER BY name ASC')->fetchAll(\PDO::FETCH_ASSOC),
+            'states'    => $db->query('SELECT id, country_id, name FROM states ORDER BY name ASC')->fetchAll(\PDO::FETCH_ASSOC),
+            'cities'    => $db->query('SELECT id, name FROM cities ORDER BY name ASC')->fetchAll(\PDO::FETCH_ASSOC),
         ]);
+    }
+
+    private function getMasterData(string $table, string $orderBy): array
+    {
+        $db = Database::getInstance();
+        $stmt = $db->prepare("SELECT * FROM {$table} WHERE status != 0 ORDER BY {$orderBy} ASC");
+        $stmt->execute();
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     private function productDataFromRequest(): array
     {
-        return [
-            'product_code' => trim((string) ($_POST['product_code'] ?? '')),
-            'name' => trim((string) ($_POST['name'] ?? '')),
-            'category_id' => (int) ($_POST['category_id'] ?? 0),
-            'hsn_code' => trim((string) ($_POST['hsn_code'] ?? '')),
-            'unit_id' => (int) ($_POST['unit_id'] ?? 0),
-            'packing_type_id' => (int) ($_POST['packing_type_id'] ?? 0),
-            'status' => (int) ($_POST['status'] ?? 1),
-            'meta' => [
-                'description_text' => trim((string) ($_POST['description_text'] ?? '')),
-                'grade_id' => (int) ($_POST['grade_id'] ?? 0),
-                'origin_id' => (int) ($_POST['origin_id'] ?? 0),
-                'gst_rate' => trim((string) ($_POST['gst_rate'] ?? '')),
-                'gst_type' => trim((string) ($_POST['gst_type'] ?? '')),
-            ],
-            'packaging' => $this->packagingFromRequest(),
-        ];
-    }
-
-    private function packagingFromRequest(): array
-    {
-        $rows = [];
-        foreach ($_POST['package_packing_type_id'] ?? [] as $index => $packingTypeId) {
-            $rows[] = [
-                'packing_type_id' => (int) $packingTypeId,
-                'unit_id' => (int) ($_POST['package_unit_id'][$index] ?? 0),
-                'quantity_per_pack' => trim((string) ($_POST['quantity_per_pack'][$index] ?? '0')),
-            ];
+        $d = $_POST;
+        foreach (['product_code', 'name', 'category_id', 'hsn_code', 'unit_id', 'packing_type_id', 'country_of_origin', 'country_id', 'state_id', 'city_id'] as $k) {
+            $d[$k] = trim((string)($d[$k] ?? ''));
         }
-
-        return $rows;
+        return $d;
     }
 
     private function validateProduct(array $data): array
     {
-        return $this->validator->validate($data, [
-            'product_code' => 'required|max:50',
-            'name' => 'required|max:255',
-            'hsn_code' => 'max:20',
-        ]);
-    }
+        $errors = [];
+        
+        if (empty($data['product_code'])) $errors['product_code'] = 'Product Code is required.';
+        if (empty($data['name'])) $errors['name'] = 'Product Name is required.';
+        if (empty($data['category_id'])) $errors['category_id'] = 'Category is required.';
+        if (empty($data['hsn_code'])) $errors['hsn_code'] = 'HS Code is required.';
+        if (empty($data['unit_id'])) $errors['unit_id'] = 'Primary Unit is required.';
+        if (empty($data['country_of_origin'])) $errors['country_of_origin'] = 'Origin is required.';
 
-    private function formatValidationErrors(array $errors): string
-    {
-        $messages = [];
-        foreach ($errors as $fieldErrors) {
-            foreach ($fieldErrors as $error) {
-                $messages[] = $error;
+        if (!empty($data['purchase_price']) && !empty($data['selling_price'])) {
+            if ((float)$data['purchase_price'] > (float)$data['selling_price']) {
+                $errors['purchase_price'] = 'Purchase Price cannot exceed Selling Price.';
             }
         }
+        
+        if (!empty($data['opening_stock']) && (float)$data['opening_stock'] < 0) {
+            $errors['opening_stock'] = 'Opening Stock cannot be negative.';
+        }
 
-        return implode(' ', $messages);
+        return $errors;
     }
 
-    private function currentUserId(): ?int
+
+
+
+    private function ajaxAddCity(): void
     {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
+        header('Content-Type: application/json');
+        
+        $stateId = !empty($_POST['state_id']) ? (int)$_POST['state_id'] : 0;
+        $cityName = !empty($_POST['city_name']) ? trim($_POST['city_name']) : '';
+        
+        if (empty($stateId) || empty($cityName)) {
+            echo json_encode(['success' => false, 'message' => 'State ID and City Name are required.']);
+            return;
+        }
+        
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare('SELECT id FROM cities WHERE state_id = ? AND name = ?');
+            $stmt->execute([$stateId, $cityName]);
+            $existing = $stmt->fetchColumn();
+            
+            if ($existing) {
+                echo json_encode([
+                    'success' => true,
+                    'city' => [
+                        'id' => (int)$existing,
+                        'state_id' => $stateId,
+                        'name' => $cityName
+                    ]
+                ]);
+                return;
+            }
+            
+            $stmt = $db->prepare('INSERT INTO cities (state_id, name, status) VALUES (?, ?, 1)');
+            $stmt->execute([$stateId, $cityName]);
+            $cityId = (int)$db->lastInsertId();
+            
+            echo json_encode([
+                'success' => true,
+                'city' => [
+                    'id' => $cityId,
+                    'state_id' => $stateId,
+                    'name' => $cityName
+                ]
+            ]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    private function ajaxGetCities(): void
+    {
+        header('Content-Type: application/json');
+        
+        $stateId = !empty($_POST['state_id']) ? (int)$_POST['state_id'] : 0;
+        
+        if (empty($stateId)) {
+            echo json_encode(['success' => true, 'cities' => []]);
+            return;
+        }
+        
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare('SELECT id, name FROM cities WHERE state_id = ? ORDER BY name ASC');
+            $stmt->execute([$stateId]);
+            $cities = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            echo json_encode(['success' => true, 'cities' => $cities]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
     }
 }

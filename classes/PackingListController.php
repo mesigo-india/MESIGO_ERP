@@ -62,6 +62,10 @@ class PackingListController extends Controller
             Response::redirect('/packing-lists/create', $this->formatValidationErrors($errors));
         }
         $id = $this->packingLists->create($data);
+        require_once APP_ROOT . '/classes/UnitConversionEngine.php';
+        require_once APP_ROOT . '/classes/ContainerLoadingEngine.php';
+        $containerEngine = new ContainerLoadingEngine(Database::getInstance(), new UnitConversionEngine(Database::getInstance()));
+        $containerEngine->estimateContainers((int) $id);
         Response::redirect('/packing-lists/' . $id, 'Packing List created successfully.');
     }
 
@@ -104,6 +108,10 @@ class PackingListController extends Controller
             Response::redirect('/packing-lists/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->packingLists->update((int) $id, $data);
+        require_once APP_ROOT . '/classes/UnitConversionEngine.php';
+        require_once APP_ROOT . '/classes/ContainerLoadingEngine.php';
+        $containerEngine = new ContainerLoadingEngine(Database::getInstance(), new UnitConversionEngine(Database::getInstance()));
+        $containerEngine->estimateContainers((int) $id);
         Response::redirect('/packing-lists/' . (int) $id, 'Packing List updated successfully.');
     }
 
@@ -254,9 +262,4 @@ class PackingListController extends Controller
         return implode(' ', $messages);
     }
 
-    private function currentUserId(): ?int
-    {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
-    }
 }

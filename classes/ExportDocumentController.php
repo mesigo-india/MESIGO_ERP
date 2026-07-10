@@ -119,9 +119,4 @@ class ExportDocumentController extends Controller
         return $attachment;
     }
 
-    private function currentUserId(): ?int
-    {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
-    }
 }

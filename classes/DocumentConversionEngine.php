@@ -51,10 +51,15 @@ class DocumentConversionEngine
                 'document_type_id' => $docType['id'],
                 'document_number' => $newNumber,
                 'document_date' => date('Y-m-d'),
+                'company_id' => $source['company_id'] ?? 1,
                 'buyer_id' => $source['buyer_id'],
                 'seller_id' => $source['seller_id'],
                 'currency_id' => $source['currency_id'],
                 'exchange_rate' => $source['exchange_rate'],
+                'rate_locked' => $source['rate_locked'] ?? 0,
+                'lut_active' => $source['lut_active'] ?? 0,
+                'tax_basis' => $source['tax_basis'] ?? 'lut',
+                'estimated_containers_json' => $source['estimated_containers_json'] ?? null,
                 'shipment_type' => $source['shipment_type'],
                 'incoterm_id' => $source['incoterm_id'],
                 'loading_port_id' => $source['loading_port_id'],
@@ -80,6 +85,32 @@ class DocumentConversionEngine
                 $item['document_header_id'] = $newId;
                 $item['sort_order'] = $index;
                 $this->documentItem->create($item);
+            }
+
+            // Copy charges (costs sheet)
+            $chargesStmt = $this->db->prepare("SELECT * FROM document_charges WHERE document_header_id = :id");
+            $chargesStmt->execute(['id' => $sourceId]);
+            $charges = $chargesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($charges as $charge) {
+                $insertCharge = $this->db->prepare("
+                    INSERT INTO document_charges 
+                    (document_header_id, cost_component_id, charge_name, charge_amount, currency_id, exchange_rate, converted_amount_base, payment_method, remarks, sort_order)
+                    VALUES 
+                    (:doc_id, :comp_id, :name, :amount, :curr_id, :rate, :base_amt, :method, :remarks, :sort)
+                ");
+                $insertCharge->execute([
+                    'doc_id' => $newId,
+                    'comp_id' => $charge['cost_component_id'],
+                    'name' => $charge['charge_name'],
+                    'amount' => $charge['charge_amount'],
+                    'curr_id' => $charge['currency_id'],
+                    'rate' => $charge['exchange_rate'],
+                    'base_amt' => $charge['converted_amount_base'],
+                    'method' => $charge['payment_method'],
+                    'remarks' => $charge['remarks'],
+                    'sort' => $charge['sort_order'],
+                ]);
             }
 
             // Update source document with converted_to_id

@@ -125,10 +125,38 @@ class Validator
     }
     
     /**
+     * Add manual error
+     */
+    public function addError(string $field, string $message): void
+    {
+        $this->errors[$field][] = $message;
+    }
+    
+    /**
+     * Check if a field is required (manual method)
+     */
+    public function required(string $field, string $label = null): void
+    {
+        $value = $_POST[$field] ?? '';
+        if (empty($value) && $value !== '0') {
+            $label = $label ?? $field;
+            $this->errors[$field][] = "{$label} is required";
+        }
+    }
+    
+    /**
      * Check if validation passed
      */
     public function passes(): bool
     {
         return empty($this->errors);
+    }
+    
+    /**
+     * Check if validation has errors
+     */
+    public function hasErrors(): bool
+    {
+        return !empty($this->errors);
     }
 }

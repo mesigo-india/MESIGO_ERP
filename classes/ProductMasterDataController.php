@@ -25,6 +25,9 @@ class ProductMasterDataController extends Controller
         'shipping-terms' => ['table' => 'shipping_terms', 'title' => 'Shipping Terms', 'singular' => 'Shipping Term', 'code_field' => 'code', 'label_field' => 'name', 'value_field' => 'name', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 100], 'code' => ['label' => 'Code', 'required' => true, 'max' => 20], 'description' => ['label' => 'Description', 'type' => 'textarea']], 'soft_delete' => true],
         'container-types' => ['table' => 'container_types', 'title' => 'Container Types', 'singular' => 'Container Type', 'code_field' => 'code', 'label_field' => 'name', 'value_field' => 'name', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 100], 'code' => ['label' => 'Code', 'required' => true, 'max' => 20], 'description' => ['label' => 'Description', 'type' => 'textarea']], 'soft_delete' => true],
         'banks' => ['table' => 'banks', 'title' => 'Banks', 'singular' => 'Bank', 'code_field' => 'code', 'label_field' => 'name', 'value_field' => 'id', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 100], 'code' => ['label' => 'Code', 'required' => true, 'max' => 20], 'branch' => ['label' => 'Branch', 'max' => 100], 'ifsc_code' => ['label' => 'IFSC Code', 'max' => 20], 'address' => ['label' => 'Address', 'type' => 'textarea']], 'soft_delete' => false],
+        'warehouses' => ['table' => 'warehouses', 'title' => 'Warehouses', 'singular' => 'Warehouse', 'code_field' => 'code', 'label_field' => 'name', 'value_field' => 'id', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 255], 'code' => ['label' => 'Code', 'required' => true, 'max' => 50], 'branch_id' => ['label' => 'Branch ID', 'type' => 'number', 'required' => false]], 'soft_delete' => false],
+        'cost-components' => ['table' => 'cost_components', 'title' => 'Cost Components', 'singular' => 'Cost Component', 'code_field' => 'code', 'label_field' => 'name', 'value_field' => 'id', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 100], 'code' => ['label' => 'Code', 'required' => true, 'max' => 50], 'category' => ['label' => 'Category', 'required' => true, 'max' => 50], 'calculation_type' => ['label' => 'Calculation Type', 'required' => true, 'max' => 20], 'default_value' => ['label' => 'Default Value', 'type' => 'number', 'step' => '0.01', 'required' => true], 'default_currency_id' => ['label' => 'Default Currency ID', 'type' => 'number', 'required' => true]], 'soft_delete' => false],
+        'cost-templates' => ['table' => 'cost_templates', 'title' => 'Cost Templates', 'singular' => 'Cost Template', 'code_field' => 'name', 'label_field' => 'name', 'value_field' => 'id', 'fields' => ['name' => ['label' => 'Name', 'required' => true, 'max' => 100], 'description' => ['label' => 'Description', 'type' => 'textarea'], 'company_id' => ['label' => 'Company ID', 'type' => 'number', 'required' => true], 'incoterm_id' => ['label' => 'Incoterm ID', 'type' => 'number', 'required' => true], 'destination_port_id' => ['label' => 'Destination Port ID', 'type' => 'number', 'required' => false]], 'soft_delete' => false],
     ];
 
     public function __construct() { parent::__construct(); $this->db = Database::getInstance(); $this->validator = new Validator(); }
@@ -90,7 +93,26 @@ class ProductMasterDataController extends Controller
     private function optionsFor(string $key): void { $this->requireLogin(); Response::success('', ['options' => $this->optionRows($this->config($key))]); }
     private function quickStoreFor(string $key): void { $this->requireLogin(); $this->requirePermission('settings.create'); if (!$this->validateCsrf()) Response::error('Invalid security token.', [], 403); $config = $this->config($key); $data = $this->dataFromRequest($config); $errors = $this->validateData($config, $data); if ($errors) Response::error($this->formatValidationErrors($errors), $errors, 422); if ($this->duplicateExists($config, $data)) Response::error('Duplicate name or code already exists.', [], 422); $id = $this->insert($config, $data); Response::success($config['singular'] . ' created successfully.', ['option' => $this->formatOption($config, $this->find($config, $id) ?: ['id' => $id] + $data)]); }
 
-    private function rows(array $config, string $search, string $status, int $page): array { [$where, $params] = $this->filters($config, $search, $status); $stmt = $this->db->prepare("SELECT * FROM {$config['table']} WHERE " . implode(' AND ', $where) . " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"); $this->bindParams($stmt, $params); $stmt->bindValue(':limit', self::PER_PAGE, PDO::PARAM_INT); $stmt->bindValue(':offset', ($page - 1) * self::PER_PAGE, PDO::PARAM_INT); $stmt->execute(); return $stmt->fetchAll(PDO::FETCH_ASSOC); }
+    private function rows(array $config, string $search, string $status, int $page): array {
+        [$where, $params] = $this->filters($config, $search, $status);
+        $hasCreatedAt = false;
+        try {
+            $descStmt = $this->db->query("DESCRIBE {$config['table']}");
+            if ($descStmt) {
+                $cols = $descStmt->fetchAll(PDO::FETCH_COLUMN);
+                $hasCreatedAt = in_array('created_at', $cols, true);
+            }
+        } catch (\Throwable) {
+            $hasCreatedAt = false;
+        }
+        $orderBy = $hasCreatedAt ? 'created_at DESC' : 'id DESC';
+        $stmt = $this->db->prepare("SELECT * FROM {$config['table']} WHERE " . implode(' AND ', $where) . " ORDER BY {$orderBy} LIMIT :limit OFFSET :offset");
+        $this->bindParams($stmt, $params);
+        $stmt->bindValue(':limit', self::PER_PAGE, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', ($page - 1) * self::PER_PAGE, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
     private function countRows(array $config, string $search, string $status): int { [$where, $params] = $this->filters($config, $search, $status); $stmt = $this->db->prepare("SELECT COUNT(*) FROM {$config['table']} WHERE " . implode(' AND ', $where)); $this->bindParams($stmt, $params); $stmt->execute(); return (int) $stmt->fetchColumn(); }
     private function optionRows(array $config): array { $label = $config['label_field']; $stmt = $this->db->prepare("SELECT * FROM {$config['table']} WHERE " . implode(' AND ', $this->baseWhere($config)) . " AND status = 1 ORDER BY {$label} ASC"); $stmt->execute(); return array_map(fn(array $row): array => $this->formatOption($config, $row), $stmt->fetchAll(PDO::FETCH_ASSOC)); }
     private function formatOption(array $config, array $row): array { $label = (string) ($row[$config['label_field']] ?? $row[$config['code_field']] ?? ''); $code = (string) ($row[$config['code_field']] ?? ''); return ['id' => (int) ($row['id'] ?? 0), 'value' => (string) ($row[$config['value_field']] ?? $row['id'] ?? ''), 'label' => $code !== '' && $code !== $label ? $code . ' - ' . $label : $label]; }

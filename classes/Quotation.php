@@ -234,26 +234,27 @@ class Quotation
     protected function save(?int $id, array $data): int
     {
         $type = $this->quotationType();
-        $totals = $this->totals($data['items'] ?? [], $data['charges'] ?? []);
         $validityDays = !empty($data['valid_until']) ? max(0, (int) floor((strtotime($data['valid_until']) - strtotime($data['document_date'])) / 86400)) : null;
+        
         $meta = [
             'revision' => (int) ($data['revision'] ?? 0),
             'buyer_contact_id' => (int) ($data['buyer_contact_id'] ?? 0),
             'shipment_term' => $data['shipment_term'] ?? '',
             'valid_until' => $data['valid_until'] ?? '',
-            'charges' => $data['charges'] ?? [],
-            'totals' => $totals,
             'email_ready' => true,
             'pdf_ready' => true,
             'print_ready' => true,
         ];
 
+        $currencyId = (int) ($data['currency_id'] ?? 1);
+        $exchangeRate = (float) ($data['exchange_rate'] ?? 1.0);
+
         $this->db->beginTransaction();
         try {
             if ($id === null) {
                 $stmt = $this->db->prepare("
-                    INSERT INTO document_headers (document_type_id, document_number, document_date, buyer_id, currency_id, exchange_rate, shipment_type, incoterm_id, loading_port_id, destination_port_id, payment_term_id, validity_days, remarks, internal_notes, status, created_by, created_at)
-                    VALUES (:document_type_id, :document_number, :document_date, :buyer_id, :currency_id, 1, :shipment_type, :incoterm_id, :loading_port_id, :destination_port_id, :payment_term_id, :validity_days, :remarks, :internal_notes, :status, :created_by, NOW())
+                    INSERT INTO document_headers (document_type_id, document_number, document_date, company_id, buyer_id, currency_id, exchange_rate, rate_locked, lut_active, tax_basis, estimated_containers_json, shipment_type, incoterm_id, loading_port_id, destination_port_id, payment_term_id, validity_days, remarks, internal_notes, status, created_by, created_at)
+                    VALUES (:document_type_id, :document_number, :document_date, :company_id, :buyer_id, :currency_id, :exchange_rate, :rate_locked, :lut_active, :tax_basis, :estimated_containers_json, :shipment_type, :incoterm_id, :loading_port_id, :destination_port_id, :payment_term_id, :validity_days, :remarks, :internal_notes, :status, :created_by, NOW())
                 ");
                 $stmt->execute($this->headerPayload($data, $type, $validityDays, $meta, true));
                 $id = (int) $this->db->lastInsertId();
@@ -261,7 +262,7 @@ class Quotation
                 $payload = $this->headerPayload($data, $type, $validityDays, $meta, false);
                 $payload['id'] = $id;
                 $stmt = $this->db->prepare("
-                    UPDATE document_headers SET document_date = :document_date, buyer_id = :buyer_id, currency_id = :currency_id, shipment_type = :shipment_type, incoterm_id = :incoterm_id, loading_port_id = :loading_port_id, destination_port_id = :destination_port_id, payment_term_id = :payment_term_id, validity_days = :validity_days, remarks = :remarks, internal_notes = :internal_notes, status = :status, updated_by = :updated_by, updated_at = NOW()
+                    UPDATE document_headers SET document_date = :document_date, company_id = :company_id, buyer_id = :buyer_id, currency_id = :currency_id, exchange_rate = :exchange_rate, rate_locked = :rate_locked, lut_active = :lut_active, tax_basis = :tax_basis, estimated_containers_json = :estimated_containers_json, shipment_type = :shipment_type, incoterm_id = :incoterm_id, loading_port_id = :loading_port_id, destination_port_id = :destination_port_id, payment_term_id = :payment_term_id, validity_days = :validity_days, remarks = :remarks, internal_notes = :internal_notes, status = :status, updated_by = :updated_by, updated_at = NOW()
                     WHERE id = :id
                 ");
                 unset($payload['document_type_id'], $payload['document_number'], $payload['created_by']);
@@ -269,7 +270,20 @@ class Quotation
             }
 
             $this->syncItems($id, $data['items'] ?? []);
-            $this->syncCharges($id, $data['charges'] ?? []);
+            $this->syncCharges($id, $data['charges'] ?? [], $currencyId, $exchangeRate);
+
+            // Execute dynamic tax computations
+            require_once APP_ROOT . '/classes/TaxCalculationEngine.php';
+            $taxEngine = new TaxCalculationEngine($this->db);
+            $taxEngine->calculateTax($id);
+
+            // Execute dynamic profitability cost evaluations
+            require_once APP_ROOT . '/classes/CurrencyConversionEngine.php';
+            require_once APP_ROOT . '/classes/CostingEngine.php';
+            $currEngine = new CurrencyConversionEngine($this->db);
+            $costEngine = new CostingEngine($this->db, $currEngine);
+            $costEngine->calculateProfitability($id);
+
             $this->db->commit();
             return $id;
         } catch (\Throwable $e) {
@@ -284,8 +298,14 @@ class Quotation
             'document_type_id' => (int) $type['id'],
             'document_number' => $data['document_number'] ?? '',
             'document_date' => $data['document_date'],
+            'company_id' => (int) ($data['company_id'] ?? $_SESSION['active_company_id'] ?? 1),
             'buyer_id' => (int) ($data['buyer_id'] ?? 0) ?: null,
             'currency_id' => (int) ($data['currency_id'] ?? 0),
+            'exchange_rate' => (float) ($data['exchange_rate'] ?? 1.0),
+            'rate_locked' => (int) ($data['rate_locked'] ?? 0),
+            'lut_active' => (int) ($data['lut_active'] ?? 0),
+            'tax_basis' => (string) ($data['tax_basis'] ?? 'lut'),
+            'estimated_containers_json' => !empty($data['estimated_containers_json']) ? json_encode($data['estimated_containers_json']) : null,
             'shipment_type' => $data['shipment_term'] ?? null,
             'incoterm_id' => (int) ($data['incoterm_id'] ?? 0) ?: null,
             'loading_port_id' => (int) ($data['loading_port_id'] ?? 0) ?: null,
@@ -305,8 +325,8 @@ class Quotation
     {
         $this->db->prepare("DELETE FROM document_items WHERE document_header_id = :id")->execute(['id' => $id]);
         $stmt = $this->db->prepare("
-            INSERT INTO document_items (document_header_id, product_id, hsn_code, quality, packing_type_id, unit_id, quantity, rate, discount_percent, discount_amount, tax_percent, tax_amount, net_amount, sort_order, created_at)
-            VALUES (:document_header_id, :product_id, :hsn_code, :quality, :packing_type_id, :unit_id, :quantity, :rate, :discount_percent, :discount_amount, :tax_percent, :tax_amount, :net_amount, :sort_order, NOW())
+            INSERT INTO document_items (document_header_id, product_id, warehouse_id, hsn_code, quality, packing_type_id, unit_id, quantity, rate, discount_percent, discount_amount, tax_percent, tax_slab_percent, tax_amount, net_amount, sort_order, created_at)
+            VALUES (:document_header_id, :product_id, :warehouse_id, :hsn_code, :quality, :packing_type_id, :unit_id, :quantity, :rate, :discount_percent, :discount_amount, :tax_percent, :tax_slab_percent, :tax_amount, :net_amount, :sort_order, NOW())
         ");
         foreach ($items as $index => $item) {
             if ((int) ($item['product_id'] ?? 0) <= 0) {
@@ -315,10 +335,13 @@ class Quotation
             $line = (float) ($item['quantity'] ?? 0) * (float) ($item['rate'] ?? 0);
             $discount = $line * ((float) ($item['discount_percent'] ?? 0) / 100);
             $taxable = $line - $discount;
-            $tax = $taxable * ((float) ($item['tax_percent'] ?? 0) / 100);
+            $taxPercent = (float) ($item['tax_percent'] ?? 0);
+            $tax = $taxable * ($taxPercent / 100);
+            
             $stmt->execute([
                 'document_header_id' => $id,
                 'product_id' => (int) $item['product_id'],
+                'warehouse_id' => (int) ($item['warehouse_id'] ?? 0) ?: null,
                 'hsn_code' => $item['hsn_code'] ?? null,
                 'quality' => json_encode(['grade_id' => (int) ($item['grade_id'] ?? 0), 'origin_id' => (int) ($item['origin_id'] ?? 0)]),
                 'packing_type_id' => (int) ($item['packing_type_id'] ?? 0) ?: null,
@@ -327,7 +350,8 @@ class Quotation
                 'rate' => (float) ($item['rate'] ?? 0),
                 'discount_percent' => (float) ($item['discount_percent'] ?? 0),
                 'discount_amount' => $discount,
-                'tax_percent' => (float) ($item['tax_percent'] ?? 0),
+                'tax_percent' => $taxPercent,
+                'tax_slab_percent' => $taxPercent,
                 'tax_amount' => $tax,
                 'net_amount' => $taxable + $tax,
                 'sort_order' => $index,
@@ -335,14 +359,63 @@ class Quotation
         }
     }
 
-    protected function syncCharges(int $id, array $charges): void
+    protected function syncCharges(int $id, array $charges, int $currencyId, float $exchangeRate): void
     {
         $this->db->prepare("DELETE FROM document_charges WHERE document_header_id = :id")->execute(['id' => $id]);
-        $stmt = $this->db->prepare("INSERT INTO document_charges (document_header_id, charge_name, charge_amount, total_amount, sort_order, created_at) VALUES (:id, :name, :amount, :amount, :sort_order, NOW())");
-        foreach (['freight' => 'Freight', 'insurance' => 'Insurance', 'other_charges' => 'Other Charges'] as $key => $label) {
-            $amount = (float) ($charges[$key] ?? 0);
-            if ($amount > 0) {
-                $stmt->execute(['id' => $id, 'name' => $label, 'amount' => $amount, 'sort_order' => array_search($key, array_keys($charges), true) ?: 0]);
+        
+        $insertStmt = $this->db->prepare("
+            INSERT INTO document_charges 
+            (document_header_id, cost_component_id, charge_name, charge_amount, currency_id, exchange_rate, converted_amount_base, payment_method, remarks, sort_order, created_at) 
+            VALUES 
+            (:doc_id, :comp_id, :name, :amount, :curr_id, :rate, :base_amt, :method, :remarks, :sort, NOW())
+        ");
+
+        $isDynamic = isset($charges[0]) && is_array($charges[0]);
+
+        if ($isDynamic) {
+            foreach ($charges as $index => $charge) {
+                $amount = (float) ($charge['charge_amount'] ?? 0.0);
+                if ($amount <= 0.0) continue;
+
+                $currId = (int) ($charge['currency_id'] ?? $currencyId);
+                $rate = (float) ($charge['exchange_rate'] ?? $exchangeRate);
+                $baseAmt = $amount * $rate;
+
+                $insertStmt->execute([
+                    'doc_id' => $id,
+                    'comp_id' => (int) ($charge['cost_component_id'] ?? 0) ?: null,
+                    'name' => trim((string) ($charge['charge_name'] ?? 'Charge')),
+                    'amount' => $amount,
+                    'curr_id' => $currId,
+                    'rate' => $rate,
+                    'base_amt' => $baseAmt,
+                    'method' => trim((string) ($charge['payment_method'] ?? '')),
+                    'remarks' => trim((string) ($charge['remarks'] ?? '')),
+                    'sort' => $index,
+                ]);
+            }
+        } else {
+            $index = 0;
+            foreach (['freight' => 'Freight', 'insurance' => 'Insurance', 'other_charges' => 'Other Charges'] as $key => $label) {
+                $amount = (float) ($charges[$key] ?? 0.0);
+                if ($amount <= 0.0) continue;
+
+                $stmtComp = $this->db->prepare("SELECT id FROM cost_components WHERE UPPER(code) = UPPER(:code) LIMIT 1");
+                $stmtComp->execute(['code' => $key]);
+                $compId = $stmtComp->fetchColumn();
+
+                $insertStmt->execute([
+                    'doc_id' => $id,
+                    'comp_id' => $compId !== false ? (int) $compId : null,
+                    'name' => $label,
+                    'amount' => $amount,
+                    'curr_id' => $currencyId,
+                    'rate' => $exchangeRate,
+                    'base_amt' => $amount * $exchangeRate,
+                    'method' => null,
+                    'remarks' => null,
+                    'sort' => $index++,
+                ]);
             }
         }
     }

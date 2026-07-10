@@ -218,6 +218,85 @@ class ReportService
         );
     }
 
+    /**
+     * Generate Enterprise Profitability Report with cost components and margins
+     */
+    public function profitabilityReport(array $filters): array
+    {
+        $where = ['dh.deleted_at IS NULL'];
+        $params = [];
+
+        if ($filters['date_from'] !== '') {
+            $where[] = 'dh.document_date >= :date_from';
+            $params['date_from'] = $filters['date_from'];
+        }
+        if ($filters['date_to'] !== '') {
+            $where[] = 'dh.document_date <= :date_to';
+            $params['date_to'] = $filters['date_to'];
+        }
+        if ($filters['buyer_id'] > 0) {
+            $where[] = 'dh.buyer_id = :buyer_id';
+            $params['buyer_id'] = $filters['buyer_id'];
+        }
+        if ($filters['product_id'] > 0) {
+            $where[] = 'EXISTS (SELECT 1 FROM document_items di2 WHERE di2.document_header_id = dh.id AND di2.product_id = :product_id)';
+            $params['product_id'] = $filters['product_id'];
+        }
+
+        $sql = "
+            SELECT 
+                dh.id, 
+                dh.document_number AS reference_no, 
+                dh.document_date AS report_date, 
+                dt.name AS document_type,
+                b.company_name AS buyer_name, 
+                comp.company_name AS company_entity,
+                curr.code AS currency_code, 
+                dh.exchange_rate,
+                
+                -- Invoice Sales base amount
+                COALESCE(
+                    (SELECT SUM(di.net_amount * dh.exchange_rate) 
+                     FROM document_items di 
+                     WHERE di.document_header_id = dh.id), 0
+                ) AS gross_sales_base,
+                
+                -- Product production cost base amount
+                COALESCE(
+                    (SELECT SUM(di.quantity * COALESCE(p.unit_cost_base, 0.00)) 
+                     FROM document_items di 
+                     INNER JOIN products p ON p.id = di.product_id
+                     WHERE di.document_header_id = dh.id), 0
+                ) AS production_cost_base,
+                
+                -- Dynamic Charges base amount
+                COALESCE(
+                    (SELECT SUM(dc.converted_amount_base) 
+                     FROM document_charges dc 
+                     WHERE dc.document_header_id = dh.id), 0
+                ) AS total_charges_base
+                
+            FROM document_headers dh
+            INNER JOIN document_types dt ON dt.id = dh.document_type_id
+            LEFT JOIN buyers b ON b.id = dh.buyer_id
+            LEFT JOIN company comp ON comp.id = dh.company_id
+            LEFT JOIN currencies curr ON curr.id = dh.currency_id
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY dh.document_date DESC, dh.id DESC
+            LIMIT 500
+        ";
+
+        $rows = $this->rows($sql, $params);
+
+        foreach ($rows as &$row) {
+            $row['net_profit_base'] = (float) $row['gross_sales_base'] - (float) $row['production_cost_base'] - (float) $row['total_charges_base'];
+            $row['margin_percent'] = (float) $row['gross_sales_base'] > 0 
+                ? ((float) $row['net_profit_base'] / (float) $row['gross_sales_base']) * 100 
+                : 0.0;
+        }
+        return $rows;
+    }
+
     private function rows(string $sql, array $params = []): array
     {
         try {

@@ -168,6 +168,10 @@ class ProformaInvoiceController extends Controller
             'meta' => $meta,
             'items' => $items,
             'action' => $action,
+            'companies' => $this->invoices->masterRows('company', 'company_name'),
+            'warehouses' => $this->invoices->masterRows('warehouses', 'name'),
+            'costTemplates' => $this->invoices->masterRows('cost_templates', 'name'),
+            'costComponents' => $this->invoices->masterRows('cost_components', 'name'),
             'buyers' => $this->invoices->masterRows('buyers', 'company_name'),
             'buyerContacts' => $this->invoices->contacts(0),
             'currencies' => $this->invoices->masterRows('currencies', 'code'),
@@ -185,47 +189,7 @@ class ProformaInvoiceController extends Controller
 
     private function invoiceDataFromRequest(): array
     {
-        return [
-            'document_date' => trim((string) ($_POST['document_date'] ?? date('Y-m-d'))),
-            'revision' => (int) ($_POST['revision'] ?? 0),
-            'buyer_id' => (int) ($_POST['buyer_id'] ?? 0),
-            'buyer_contact_id' => (int) ($_POST['buyer_contact_id'] ?? 0),
-            'currency_id' => (int) ($_POST['currency_id'] ?? 0),
-            'incoterm_id' => (int) ($_POST['incoterm_id'] ?? 0),
-            'payment_term_id' => (int) ($_POST['payment_term_id'] ?? 0),
-            'shipment_term' => trim((string) ($_POST['shipment_term'] ?? '')),
-            'delivery_port_id' => (int) ($_POST['delivery_port_id'] ?? 0),
-            'loading_port_id' => (int) ($_POST['loading_port_id'] ?? 0),
-            'valid_until' => trim((string) ($_POST['valid_until'] ?? '')),
-            'remarks' => trim((string) ($_POST['remarks'] ?? '')),
-            'status' => (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT),
-            'charges' => [
-                'freight' => trim((string) ($_POST['freight'] ?? '0')),
-                'insurance' => trim((string) ($_POST['insurance'] ?? '0')),
-                'other_charges' => trim((string) ($_POST['other_charges'] ?? '0')),
-            ],
-            'items' => $this->itemsFromRequest(),
-        ];
-    }
-
-    private function itemsFromRequest(): array
-    {
-        $items = [];
-        foreach ($_POST['product_id'] ?? [] as $index => $productId) {
-            $items[] = [
-                'product_id' => (int) $productId,
-                'grade_id' => (int) ($_POST['grade_id'][$index] ?? 0),
-                'origin_id' => (int) ($_POST['origin_id'][$index] ?? 0),
-                'hsn_code' => trim((string) ($_POST['hsn_code'][$index] ?? '')),
-                'packing_type_id' => (int) ($_POST['packing_type_id'][$index] ?? 0),
-                'quantity' => trim((string) ($_POST['quantity'][$index] ?? '0')),
-                'unit_id' => (int) ($_POST['unit_id'][$index] ?? 0),
-                'rate' => trim((string) ($_POST['rate'][$index] ?? '0')),
-                'discount_percent' => trim((string) ($_POST['discount_percent'][$index] ?? '0')),
-                'tax_percent' => trim((string) ($_POST['tax_percent'][$index] ?? '0')),
-            ];
-        }
-        return $items;
+        return $this->extractDocumentDataFromRequest(ProformaInvoice::STATUS_DRAFT);
     }
 
     private function validateInvoice(array $data): array
@@ -263,9 +227,4 @@ class ProformaInvoiceController extends Controller
         return implode(' ', $messages);
     }
 
-    private function currentUserId(): ?int
-    {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
-    }
 }

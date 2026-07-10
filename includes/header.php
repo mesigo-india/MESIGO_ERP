@@ -46,7 +46,16 @@
                     <?php if (!empty($errors)): ?>
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <ul class="mb-0">
-                                <?php foreach ($errors as $error): ?>
+                                <?php 
+                                $flatErrors = [];
+                                foreach ($errors as $err) {
+                                    if (is_array($err)) {
+                                        foreach ($err as $e) $flatErrors[] = $e;
+                                    } else {
+                                        $flatErrors[] = $err;
+                                    }
+                                }
+                                foreach ($flatErrors as $error): ?>
                                     <li><?= escapeHtml($error) ?></li>
                                 <?php endforeach; ?>
                             </ul>

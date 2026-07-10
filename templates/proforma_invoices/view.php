@@ -55,6 +55,27 @@ $history = $history ?? [];
             <div class="col-md-7"><strong>Remarks:</strong><br><?= nl2br(escapeHtml($quotation['remarks'] ?? '')) ?></div>
             <div class="col-md-5"><table class="table table-sm"><tr><th>Subtotal</th><td class="text-end"><?= number_format((float) ($totals['subtotal'] ?? 0), 2) ?></td></tr><tr><th>Discount</th><td class="text-end"><?= number_format((float) ($totals['discount'] ?? 0), 2) ?></td></tr><tr><th>GST</th><td class="text-end"><?= number_format((float) ($totals['gst'] ?? 0), 2) ?></td></tr><tr><th>Freight</th><td class="text-end"><?= number_format((float) ($totals['freight'] ?? 0), 2) ?></td></tr><tr><th>Insurance</th><td class="text-end"><?= number_format((float) ($totals['insurance'] ?? 0), 2) ?></td></tr><tr><th>Other Charges</th><td class="text-end"><?= number_format((float) ($totals['other'] ?? 0), 2) ?></td></tr><tr class="fs-5"><th>Grand Total</th><td class="text-end"><strong><?= number_format((float) ($totals['grand'] ?? 0), 2) ?></strong></td></tr></table></div>
         </div>
+        
+        <?php if (!empty($quotation['estimated_containers_json'])): ?>
+            <?php $containers = json_decode($quotation['estimated_containers_json'], true); ?>
+            <?php if (!empty($containers)): ?>
+                <div class="mt-4 p-3 bg-light rounded border border-warning">
+                    <h5 class="text-warning font-weight-bold"><i class="fa fa-ship"></i> Container Loading Recommendation</h5>
+                    <div class="row">
+                        <?php foreach ($containers as $c): ?>
+                            <div class="col-md-4 mb-2">
+                                <div class="card shadow-sm border-0 p-3 bg-white">
+                                    <strong>Type:</strong> <?= escapeHtml($c['container_type']) ?><br>
+                                    <strong>Quantity Recommended:</strong> <span class="badge bg-primary fs-6"><?= (int) $c['container_count'] ?></span><br>
+                                    <strong>Estimated Utilization:</strong> <?= number_format($c['utilization_percent'], 1) ?>%<br>
+                                    <strong>Total CBM:</strong> <?= number_format($c['total_volume_cbm'], 2) ?> m³ / <strong>Total Weight:</strong> <?= number_format($c['total_weight_kg'] / 1000, 2) ?> MT
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
 </div>
 

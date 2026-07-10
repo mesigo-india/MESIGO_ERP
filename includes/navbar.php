@@ -3,7 +3,7 @@
  * MESIGO ERP - Navbar Template
  */
 ?>
-<header class="navbar navbar-expand navbar-light bg-white border-bottom">
+<header class="navbar navbar-expand navbar-light bg-white border-bottom d-print-none">
     <div class="container-fluid">
         <button class="btn btn-outline-secondary d-md-none" type="button" id="sidebarToggle">
             <i class="fas fa-bars"></i>

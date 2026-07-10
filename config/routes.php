@@ -49,6 +49,14 @@ $router->get('/buyers/{id}/edit', 'BuyerController@edit');
 $router->post('/buyers/{id}', 'BuyerController@update');
 $router->post('/buyers/{id}/delete', 'BuyerController@delete');
 
+// Supplier CRM Routes
+$router->get('/suppliers', 'SupplierController@index');
+$router->get('/suppliers/create', 'SupplierController@create');
+$router->post('/suppliers', 'SupplierController@store');
+$router->get('/suppliers/{id}/edit', 'SupplierController@edit');
+$router->post('/suppliers/{id}', 'SupplierController@update');
+$router->post('/suppliers/{id}/delete', 'SupplierController@delete');
+
 // Product Master Routes
 $router->get('/products', 'ProductController@index');
 $router->get('/products/create', 'ProductController@create');
@@ -69,6 +77,7 @@ $router->post('/quotations/{id}/revise', 'QuotationController@revise');
 $router->get('/quotations/{id}/print', 'QuotationController@print');
 $router->post('/quotations/{id}/email', 'QuotationController@email');
 $router->post('/quotations/{id}/convert', 'QuotationController@convert');
+$router->get('/settings/cost-templates/{id}/items', 'QuotationController@costTemplateItems');
 
 // Proforma Invoice Routes
 $router->get('/proforma-invoices', 'ProformaInvoiceController@index');

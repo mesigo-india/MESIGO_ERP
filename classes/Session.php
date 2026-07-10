@@ -137,4 +137,13 @@ class Session
     {
         return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
     }
+
+    /**
+     * Set a flash message
+     */
+    public static function setFlash(string $type, string $message): void
+    {
+        $_SESSION['flash_message'] = $message;
+        $_SESSION['flash_type'] = $type;
+    }
 }

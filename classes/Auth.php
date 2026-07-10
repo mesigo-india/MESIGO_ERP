@@ -114,6 +114,14 @@ class Auth
     }
     
     /**
+     * Get current user ID
+     */
+    public function id(): ?int
+    {
+        return $this->isLoggedIn() ? (int)Session::get('user_id') : null;
+    }
+    
+    /**
      * Login user
      */
     public function login(array $user): void

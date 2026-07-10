@@ -185,6 +185,10 @@ class QuotationController extends Controller
             'meta' => $meta,
             'items' => $items,
             'action' => $action,
+            'companies' => $this->quotations->masterRows('company', 'company_name'),
+            'warehouses' => $this->quotations->masterRows('warehouses', 'name'),
+            'costTemplates' => $this->quotations->masterRows('cost_templates', 'name'),
+            'costComponents' => $this->quotations->masterRows('cost_components', 'name'),
             'buyers' => $this->quotations->masterRows('buyers', 'company_name'),
             'buyerContacts' => $this->quotations->contacts(0),
             'currencies' => $this->quotations->masterRows('currencies', 'code'),
@@ -202,47 +206,7 @@ class QuotationController extends Controller
 
     private function quotationDataFromRequest(): array
     {
-        return [
-            'document_date' => trim((string) ($_POST['document_date'] ?? date('Y-m-d'))),
-            'revision' => (int) ($_POST['revision'] ?? 0),
-            'buyer_id' => (int) ($_POST['buyer_id'] ?? 0),
-            'buyer_contact_id' => (int) ($_POST['buyer_contact_id'] ?? 0),
-            'currency_id' => (int) ($_POST['currency_id'] ?? 0),
-            'incoterm_id' => (int) ($_POST['incoterm_id'] ?? 0),
-            'payment_term_id' => (int) ($_POST['payment_term_id'] ?? 0),
-            'shipment_term' => trim((string) ($_POST['shipment_term'] ?? '')),
-            'delivery_port_id' => (int) ($_POST['delivery_port_id'] ?? 0),
-            'loading_port_id' => (int) ($_POST['loading_port_id'] ?? 0),
-            'valid_until' => trim((string) ($_POST['valid_until'] ?? '')),
-            'remarks' => trim((string) ($_POST['remarks'] ?? '')),
-            'status' => (int) ($_POST['status'] ?? Quotation::STATUS_DRAFT),
-            'charges' => [
-                'freight' => trim((string) ($_POST['freight'] ?? '0')),
-                'insurance' => trim((string) ($_POST['insurance'] ?? '0')),
-                'other_charges' => trim((string) ($_POST['other_charges'] ?? '0')),
-            ],
-            'items' => $this->itemsFromRequest(),
-        ];
-    }
-
-    private function itemsFromRequest(): array
-    {
-        $items = [];
-        foreach ($_POST['product_id'] ?? [] as $index => $productId) {
-            $items[] = [
-                'product_id' => (int) $productId,
-                'grade_id' => (int) ($_POST['grade_id'][$index] ?? 0),
-                'origin_id' => (int) ($_POST['origin_id'][$index] ?? 0),
-                'hsn_code' => trim((string) ($_POST['hsn_code'][$index] ?? '')),
-                'packing_type_id' => (int) ($_POST['packing_type_id'][$index] ?? 0),
-                'quantity' => trim((string) ($_POST['quantity'][$index] ?? '0')),
-                'unit_id' => (int) ($_POST['unit_id'][$index] ?? 0),
-                'rate' => trim((string) ($_POST['rate'][$index] ?? '0')),
-                'discount_percent' => trim((string) ($_POST['discount_percent'][$index] ?? '0')),
-                'tax_percent' => trim((string) ($_POST['tax_percent'][$index] ?? '0')),
-            ];
-        }
-        return $items;
+        return $this->extractDocumentDataFromRequest(Quotation::STATUS_DRAFT);
     }
 
     private function validateQuotation(array $data): array
@@ -284,9 +248,25 @@ class QuotationController extends Controller
         return implode(' ', $messages);
     }
 
-    private function currentUserId(): ?int
+
+    /**
+     * API to fetch items for a costing template
+     */
+    public function costTemplateItems(string $id): void
     {
-        $user = $this->auth->user();
-        return $user ? (int) $user['id'] : null;
+        $this->requireLogin();
+        $stmt = Database::getInstance()->prepare("
+            SELECT t.*, c.name as component_name 
+            FROM cost_template_items t
+            LEFT JOIN cost_components c ON t.cost_component_id = c.id
+            WHERE t.cost_template_id = :id
+            ORDER BY t.sort_order ASC
+        ");
+        $stmt->execute(['id' => (int) $id]);
+        $items = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        
+        header('Content-Type: application/json');
+        echo json_encode($items);
+        exit;
     }
 }
