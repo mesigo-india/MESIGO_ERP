@@ -141,6 +141,7 @@ class ExportDocumentManager
             'shipping_bill' => 'Shipping Bill',
             'bill_of_lading' => 'Bill of Lading',
             'certificate_of_origin' => 'Certificate of Origin',
+            'non_hazardous_cert' => 'Non-Hazardous Certificate',
             'phytosanitary' => 'Phytosanitary',
             'fumigation' => 'Fumigation',
             'insurance' => 'Insurance',

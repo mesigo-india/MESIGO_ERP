@@ -178,6 +178,21 @@ class BillOfLadingController extends Controller
         return $bill;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/bill-of-ladings/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/bill-of-ladings/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findBillOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/bill-of-ladings', 'Bill of Lading deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -188,5 +203,4 @@ class BillOfLadingController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }

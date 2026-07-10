@@ -79,6 +79,7 @@ $router->post('/quotations/{id}/revise', 'QuotationController@revise');
 $router->get('/quotations/{id}/print', 'QuotationController@print');
 $router->post('/quotations/{id}/email', 'QuotationController@email');
 $router->post('/quotations/{id}/convert', 'QuotationController@convert');
+$router->post('/quotations/{id}/delete', 'QuotationController@delete');
 $router->get('/settings/cost-templates/{id}/items', 'QuotationController@costTemplateItems');
 
 // Proforma Invoice Routes
@@ -93,6 +94,7 @@ $router->post('/proforma-invoices/{id}/revise', 'ProformaInvoiceController@revis
 $router->get('/proforma-invoices/{id}/print', 'ProformaInvoiceController@print');
 $router->post('/proforma-invoices/{id}/email', 'ProformaInvoiceController@email');
 $router->post('/proforma-invoices/{id}/convert', 'ProformaInvoiceController@convert');
+$router->post('/proforma-invoices/{id}/delete', 'ProformaInvoiceController@delete');
 
 // Commercial Invoice Routes
 $router->get('/commercial-invoices', 'CommercialInvoiceController@index');
@@ -106,6 +108,7 @@ $router->post('/commercial-invoices/{id}/revise', 'CommercialInvoiceController@r
 $router->get('/commercial-invoices/{id}/print', 'CommercialInvoiceController@print');
 $router->post('/commercial-invoices/{id}/email', 'CommercialInvoiceController@email');
 $router->post('/commercial-invoices/{id}/convert', 'CommercialInvoiceController@convert');
+$router->post('/commercial-invoices/{id}/delete', 'CommercialInvoiceController@delete');
 
 // Packing List Routes
 $router->get('/packing-lists', 'PackingListController@index');
@@ -118,6 +121,7 @@ $router->post('/packing-lists/{id}/status', 'PackingListController@status');
 $router->post('/packing-lists/{id}/revise', 'PackingListController@revise');
 $router->get('/packing-lists/{id}/print', 'PackingListController@print');
 $router->post('/packing-lists/{id}/email', 'PackingListController@email');
+$router->post('/packing-lists/{id}/delete', 'PackingListController@delete');
 
 // Shipping Bill Routes
 $router->get('/shipping-bills', 'ShippingBillController@index');
@@ -131,6 +135,7 @@ $router->post('/shipping-bills/{id}/revise', 'ShippingBillController@revise');
 $router->get('/shipping-bills/{id}/print', 'ShippingBillController@print');
 $router->post('/shipping-bills/{id}/email', 'ShippingBillController@email');
 $router->post('/shipping-bills/{id}/convert', 'ShippingBillController@convert');
+$router->post('/shipping-bills/{id}/delete', 'ShippingBillController@delete');
 
 // Bill of Lading Routes
 $router->get('/bill-of-ladings', 'BillOfLadingController@index');
@@ -143,6 +148,7 @@ $router->post('/bill-of-ladings/{id}/status', 'BillOfLadingController@status');
 $router->post('/bill-of-ladings/{id}/revise', 'BillOfLadingController@revise');
 $router->get('/bill-of-ladings/{id}/print', 'BillOfLadingController@print');
 $router->post('/bill-of-ladings/{id}/convert', 'BillOfLadingController@convert');
+$router->post('/bill-of-ladings/{id}/delete', 'BillOfLadingController@delete');
 
 // Certificate of Origin Routes
 $router->get('/certificate-of-origins', 'CertificateOfOriginController@index');
@@ -154,6 +160,12 @@ $router->post('/certificate-of-origins/{id}', 'CertificateOfOriginController@upd
 $router->post('/certificate-of-origins/{id}/status', 'CertificateOfOriginController@status');
 $router->post('/certificate-of-origins/{id}/revise', 'CertificateOfOriginController@revise');
 $router->get('/certificate-of-origins/{id}/print', 'CertificateOfOriginController@print');
+$router->post('/certificate-of-origins/{id}/delete', 'CertificateOfOriginController@delete');
+
+// Non-Hazardous Certificate Routes
+$router->get('/non-hazardous-certs', 'NonHazardousCertController@index');
+$router->get('/non-hazardous-certs/{id}', 'NonHazardousCertController@show');
+$router->post('/non-hazardous-certs/{id}/delete', 'NonHazardousCertController@delete');
 
 // Export Documentation Center Routes
 $router->get('/export-documents', 'ExportDocumentController@index');

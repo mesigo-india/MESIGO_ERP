@@ -114,8 +114,87 @@ class CommercialInvoiceController extends Controller
             Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
         }
         $this->findInvoiceOrRedirect((int) $id);
-        $this->invoices->updateStatus((int) $id, (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $statusId = (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT);
+        $this->invoices->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        
+        if ($statusId === 2) { // 2 = Approved
+            $this->autoGenerateExportDocuments((int) $id, (int) $this->currentUserId());
+        }
+        
         Response::redirect('/commercial-invoices/' . (int) $id, 'Commercial Invoice status updated.');
+    }
+
+    private function autoGenerateExportDocuments(int $id, int $userId): void
+    {
+        $db = Database::getInstance();
+        $attachmentManager = new AttachmentManager($db);
+        
+        // Check if documents are already auto-generated to avoid duplicate entries
+        $checkStmt = $db->prepare("SELECT COUNT(*) FROM document_attachments WHERE document_header_id = :id AND file_path LIKE 'print-link:%'");
+        $checkStmt->execute(['id' => $id]);
+        if ((int)$checkStmt->fetchColumn() > 0) {
+            return; // Already generated
+        }
+
+        $typesToGenerate = [
+            'packing_list' => [
+                'label' => 'Packing List',
+                'route' => 'packing-lists',
+                'attachment_type' => 'packing_list'
+            ],
+            'shipping_bill' => [
+                'label' => 'Draft Shipping Bill',
+                'route' => 'shipping-bills',
+                'attachment_type' => 'shipping_bill'
+            ],
+            'bill_of_lading' => [
+                'label' => 'Draft Bill of Lading',
+                'route' => 'bill-of-ladings',
+                'attachment_type' => 'bill_of_lading'
+            ],
+            'certificate_of_origin' => [
+                'label' => 'Certificate of Origin',
+                'route' => 'certificate-of-origins',
+                'attachment_type' => 'certificate_of_origin'
+            ],
+            'non_hazardous_cert' => [
+                'label' => 'Non-Hazardous Certificate',
+                'route' => 'non-hazardous-certs',
+                'attachment_type' => 'non_hazardous_cert'
+            ]
+        ];
+
+        $converter = new DocumentConversionEngine($db);
+        
+        foreach ($typesToGenerate as $typeCode => $info) {
+            try {
+                $newDocId = $converter->convert($id, $typeCode, $userId, ['status' => 0]); // Status 0 (Draft)
+                
+                $numStmt = $db->prepare("SELECT document_number FROM document_headers WHERE id = :id");
+                $numStmt->execute(['id' => $newDocId]);
+                $docNumber = $numStmt->fetchColumn() ?: $info['label'];
+
+                $attachmentManager->add(
+                    $id,
+                    $docNumber . '.pdf',
+                    $info['label'] . ' ' . $docNumber . ' (Auto-Generated)',
+                    'print-link:' . $info['route'] . '/' . $newDocId,
+                    'text/html',
+                    0,
+                    $info['attachment_type'],
+                    $userId
+                );
+            } catch (\Throwable $e) {
+                $this->logger->error('Failed to auto-generate export document', [
+                    'ci_id' => $id,
+                    'type' => $typeCode,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        // Restore Commercial Invoice status to 2 (Approved) and clear converted_to_id
+        $db->prepare("UPDATE document_headers SET status = 2, converted_to_id = NULL WHERE id = :id")->execute(['id' => $id]);
     }
 
     public function revise(string $id): void
@@ -150,7 +229,10 @@ class CommercialInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        if ((int) ($invoice['status'] ?? 0) !== CommercialInvoice::STATUS_APPROVED) {
+            Response::redirect('/commercial-invoices/' . (int) $id, 'This Commercial Invoice must be Approved before converting to a Packing List.');
+        }
         $packingListId = $this->invoices->convertToPackingList((int) $id, (int) $this->currentUserId());
         Response::redirect('/commercial-invoices/' . (int) $id, 'Commercial Invoice converted to Packing List reference #' . $packingListId . '.');
     }
@@ -211,6 +293,21 @@ class CommercialInvoiceController extends Controller
         return $invoice;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/commercial-invoices/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findInvoiceOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/commercial-invoices', 'Commercial Invoice deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -221,5 +318,4 @@ class CommercialInvoiceController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }

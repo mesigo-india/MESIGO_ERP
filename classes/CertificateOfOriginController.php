@@ -158,6 +158,21 @@ class CertificateOfOriginController extends Controller
         return $certificate;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/certificate-of-origins/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/certificate-of-origins/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findCertificateOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/certificate-of-origins', 'Certificate of Origin deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -168,5 +183,4 @@ class CertificateOfOriginController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }

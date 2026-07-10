@@ -118,6 +118,7 @@ class NumberGenerator
             ['name' => 'shipping_bill', 'prefix' => 'SB', 'padding' => 5],
             ['name' => 'bill_of_lading', 'prefix' => 'BL', 'padding' => 5],
             ['name' => 'certificate_of_origin', 'prefix' => 'CO', 'padding' => 5],
+            ['name' => 'non_hazardous_cert', 'prefix' => 'NHC', 'padding' => 5],
             ['name' => 'phytosanitary', 'prefix' => 'PS', 'padding' => 5],
             ['name' => 'insurance', 'prefix' => 'INS', 'padding' => 5],
             ['name' => 'inspection', 'prefix' => 'INS', 'padding' => 5],

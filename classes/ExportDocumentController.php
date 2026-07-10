@@ -65,6 +65,12 @@ class ExportDocumentController extends Controller
         $this->requireLogin();
         $this->requirePermission('export_documents.view');
         $attachment = $this->findAttachmentOrRedirect((int) $id);
+        
+        if (str_starts_with((string) ($attachment['file_path'] ?? ''), 'print-link:')) {
+            $link = str_replace('print-link:', '', $attachment['file_path']);
+            Response::redirect('/' . $link);
+        }
+
         $path = APP_ROOT . '/' . $attachment['file_path'];
         if (!is_file($path)) {
             Response::redirect('/export-documents', 'File not found.');
@@ -80,6 +86,12 @@ class ExportDocumentController extends Controller
         $this->requireLogin();
         $this->requirePermission('export_documents.view');
         $attachment = $this->findAttachmentOrRedirect((int) $id);
+
+        if (str_starts_with((string) ($attachment['file_path'] ?? ''), 'print-link:')) {
+            $link = str_replace('print-link:', '', $attachment['file_path']);
+            Response::redirect('/' . $link);
+        }
+
         $path = APP_ROOT . '/' . $attachment['file_path'];
         if (!is_file($path)) {
             Response::redirect('/export-documents', 'File not found.');

@@ -172,7 +172,10 @@ class QuotationController extends Controller
             Response::redirect('/quotations/' . (int) $id, 'Invalid security token.');
         }
 
-        $this->findQuotationOrRedirect((int) $id);
+        $quotation = $this->findQuotationOrRedirect((int) $id);
+        if ((int) ($quotation['status'] ?? 0) !== Quotation::STATUS_APPROVED) {
+            Response::redirect('/quotations/' . (int) $id, 'This Quotation must be Approved before converting to a Proforma Invoice.');
+        }
         $piId = $this->quotations->convertToProforma((int) $id, (int) $this->currentUserId());
         Response::redirect('/quotations/' . (int) $id, 'Quotation converted to Proforma Invoice reference #' . $piId . '.');
     }
@@ -248,6 +251,21 @@ class QuotationController extends Controller
         return implode(' ', $messages);
     }
 
+
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/quotations/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/quotations/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findQuotationOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/quotations', 'Quotation deleted successfully.');
+    }
 
     /**
      * API to fetch items for a costing template

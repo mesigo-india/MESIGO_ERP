@@ -155,7 +155,10 @@ class ProformaInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/proforma-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        if ((int) ($invoice['status'] ?? 0) !== ProformaInvoice::STATUS_APPROVED) {
+            Response::redirect('/proforma-invoices/' . (int) $id, 'This Proforma Invoice must be Approved before converting to a Commercial Invoice.');
+        }
         $ciId = $this->invoices->convertToCommercialInvoice((int) $id, (int) $this->currentUserId());
         Response::redirect('/proforma-invoices/' . (int) $id, 'Proforma Invoice converted to Commercial Invoice reference #' . $ciId . '.');
     }
@@ -216,6 +219,21 @@ class ProformaInvoiceController extends Controller
         return $invoice;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/proforma-invoices/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/proforma-invoices/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findInvoiceOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/proforma-invoices', 'Proforma Invoice deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -226,5 +244,4 @@ class ProformaInvoiceController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }

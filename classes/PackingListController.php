@@ -251,6 +251,21 @@ class PackingListController extends Controller
         return $packingList;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/packing-lists/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/packing-lists/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findPackingListOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/packing-lists', 'Packing List deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -261,5 +276,4 @@ class PackingListController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }

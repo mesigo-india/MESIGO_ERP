@@ -249,6 +249,21 @@ class ShippingBillController extends Controller
         return $shippingBill;
     }
 
+    public function delete(string $id): void
+    {
+        $this->requireLogin();
+        if ($this->auth->user()['role_name'] !== 'admin') {
+            Response::redirect('/shipping-bills/' . (int) $id, 'Only administrators can delete transactions.');
+        }
+        if (!$this->validateCsrf()) {
+            Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findShippingBillOrRedirect((int) $id);
+        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
+        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
+        Response::redirect('/shipping-bills', 'Shipping Bill deleted successfully.');
+    }
+
     private function formatValidationErrors(array $errors): string
     {
         $messages = [];
@@ -259,5 +274,4 @@ class ShippingBillController extends Controller
         }
         return implode(' ', $messages);
     }
-
 }
