@@ -151,7 +151,13 @@ $address = $address ?? [];
                         <label class="form-label" for="logo_file">Company Logo (Light Background)</label>
                         <input type="file" id="logo_file" name="logo_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['logo_path'])): ?>
-                            <div class="mt-2"><img src="/uploads/<?= htmlspecialchars($company['logo_path']) ?>" class="img-thumbnail" style="max-height: 50px;"></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="/uploads/<?= htmlspecialchars($company['logo_path']) ?>" class="img-thumbnail" style="max-height: 50px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_logo" value="1" id="remove_logo">
+                                    <label class="form-check-label text-danger small" for="remove_logo">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Stamp -->
@@ -159,7 +165,13 @@ $address = $address ?? [];
                         <label class="form-label" for="stamp_file">Company Stamp Image (PNG Transparent)</label>
                         <input type="file" id="stamp_file" name="stamp_file" class="form-control" accept="image/png">
                         <?php if (!empty($company['stamp_path'])): ?>
-                            <div class="mt-2"><img src="/uploads/<?= htmlspecialchars($company['stamp_path']) ?>" class="img-thumbnail" style="max-height: 50px;"></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="/uploads/<?= htmlspecialchars($company['stamp_path']) ?>" class="img-thumbnail" style="max-height: 50px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_stamp" value="1" id="remove_stamp">
+                                    <label class="form-check-label text-danger small" for="remove_stamp">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Seal -->
@@ -167,7 +179,13 @@ $address = $address ?? [];
                         <label class="form-label" for="seal_file">Company Seal Image (PNG Transparent)</label>
                         <input type="file" id="seal_file" name="seal_file" class="form-control" accept="image/png">
                         <?php if (!empty($company['seal_path'])): ?>
-                            <div class="mt-2"><img src="/uploads/<?= htmlspecialchars($company['seal_path']) ?>" class="img-thumbnail" style="max-height: 50px;"></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="/uploads/<?= htmlspecialchars($company['seal_path']) ?>" class="img-thumbnail" style="max-height: 50px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_seal" value="1" id="remove_seal">
+                                    <label class="form-check-label text-danger small" for="remove_seal">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Captured Signature -->
@@ -175,7 +193,13 @@ $address = $address ?? [];
                         <label class="form-label" for="signature_file">Captured Written Signature Image</label>
                         <input type="file" id="signature_file" name="signature_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['signature_path'])): ?>
-                            <div class="mt-2"><img src="/uploads/<?= htmlspecialchars($company['signature_path']) ?>" class="img-thumbnail" style="max-height: 50px;"></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="/uploads/<?= htmlspecialchars($company['signature_path']) ?>" class="img-thumbnail" style="max-height: 50px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_signature" value="1" id="remove_signature">
+                                    <label class="form-check-label text-danger small" for="remove_signature">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Digital Signature -->
@@ -183,7 +207,13 @@ $address = $address ?? [];
                         <label class="form-label" for="digital_signature_file">Cryptographic / Digital Signature Image</label>
                         <input type="file" id="digital_signature_file" name="digital_signature_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['digital_signature_path'])): ?>
-                            <div class="mt-2"><img src="/uploads/<?= htmlspecialchars($company['digital_signature_path']) ?>" class="img-thumbnail" style="max-height: 50px;"></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="/uploads/<?= htmlspecialchars($company['digital_signature_path']) ?>" class="img-thumbnail" style="max-height: 50px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_digital_signature" value="1" id="remove_digital_signature">
+                                    <label class="form-check-label text-danger small" for="remove_digital_signature">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -205,7 +235,13 @@ $address = $address ?? [];
                         <label class="form-label" for="letterhead_file">Global / Base Letterhead Image (A4 dimensions)</label>
                         <input type="file" id="letterhead_file" name="letterhead_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['letterhead_path'])): ?>
-                            <div class="mt-2"><a href="/uploads/<?= htmlspecialchars($company['letterhead_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <a href="/uploads/<?= htmlspecialchars($company['letterhead_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_letterhead" value="1" id="remove_letterhead">
+                                    <label class="form-check-label text-danger small" for="remove_letterhead">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Export Letterhead -->
@@ -213,7 +249,13 @@ $address = $address ?? [];
                         <label class="form-label" for="letterhead_export_file">Export-specific Letterhead</label>
                         <input type="file" id="letterhead_export_file" name="letterhead_export_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['letterhead_export_path'])): ?>
-                            <div class="mt-2"><a href="/uploads/<?= htmlspecialchars($company['letterhead_export_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <a href="/uploads/<?= htmlspecialchars($company['letterhead_export_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_letterhead_export" value="1" id="remove_letterhead_export">
+                                    <label class="form-check-label text-danger small" for="remove_letterhead_export">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <!-- Domestic Letterhead -->
@@ -221,8 +263,53 @@ $address = $address ?? [];
                         <label class="form-label" for="letterhead_domestic_file">Domestic-specific Letterhead</label>
                         <input type="file" id="letterhead_domestic_file" name="letterhead_domestic_file" class="form-control" accept="image/*">
                         <?php if (!empty($company['letterhead_domestic_path'])): ?>
-                            <div class="mt-2"><a href="/uploads/<?= htmlspecialchars($company['letterhead_domestic_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a></div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <a href="/uploads/<?= htmlspecialchars($company['letterhead_domestic_path']) ?>" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="fas fa-external-link-alt"></i> View current</a>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="remove_letterhead_domestic" value="1" id="remove_letterhead_domestic">
+                                    <label class="form-check-label text-danger small" for="remove_letterhead_domestic">Remove</label>
+                                </div>
+                            </div>
                         <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 6.5: Print Area Dimensions and Margins settings -->
+            <div class="mb-4">
+                <h5 class="fw-bold border-bottom pb-2 text-primary"><i class="fas fa-arrows-alt me-1"></i> Print Area & Dimensions (A4 Optimization)</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label" for="print_margin_top">Letterhead Top Margin (mm)</label>
+                        <input type="number" id="print_margin_top" name="print_margin_top" class="form-control" value="<?= (int)($company['print_margin_top'] ?? 45) ?>" required min="0" max="200">
+                        <div class="form-text text-muted">Clearance for printed header details.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="print_margin_bottom">Letterhead Bottom Margin (mm)</label>
+                        <input type="number" id="print_margin_bottom" name="print_margin_bottom" class="form-control" value="<?= (int)($company['print_margin_bottom'] ?? 35) ?>" required min="0" max="200">
+                        <div class="form-text text-muted">Clearance for printed footer stamp/seal.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="print_margin_left">Left Margin (mm)</label>
+                        <input type="number" id="print_margin_left" name="print_margin_left" class="form-control" value="<?= (int)($company['print_margin_left'] ?? 20) ?>" required min="0" max="100">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="print_margin_right">Right Margin (mm)</label>
+                        <input type="number" id="print_margin_right" name="print_margin_right" class="form-control" value="<?= (int)($company['print_margin_right'] ?? 20) ?>" required min="0" max="100">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label" for="signature_print_width">Signature Display Width (px)</label>
+                        <input type="number" id="signature_print_width" name="signature_print_width" class="form-control" value="<?= (int)($company['signature_print_width'] ?? 120) ?>" required min="20" max="500">
+                        <div class="form-text text-muted">Scale of signature image on document footprint.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="seal_print_width">Official Seal Display Width (px)</label>
+                        <input type="number" id="seal_print_width" name="seal_print_width" class="form-control" value="<?= (int)($company['seal_print_width'] ?? 100) ?>" required min="20" max="500">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="stamp_print_width">Company Stamp Display Width (px)</label>
+                        <input type="number" id="stamp_print_width" name="stamp_print_width" class="form-control" value="<?= (int)($company['stamp_print_width'] ?? 100) ?>" required min="20" max="500">
                     </div>
                 </div>
             </div>

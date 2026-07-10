@@ -51,7 +51,7 @@ $qrApiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=" . url
                 
                 <!-- Seal -->
                 <?php if ($seal): ?>
-                    <img src="<?= htmlspecialchars($seal) ?>" alt="Seal" class="img-fluid" style="max-height: 75px; width: auto;">
+                    <img src="<?= htmlspecialchars($seal) ?>" alt="Seal" class="img-fluid" style="max-width: <?= (int)($company['seal_print_width'] ?? 100) ?>px; height: auto;">
                 <?php endif; ?>
             </div>
 
@@ -60,10 +60,10 @@ $qrApiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=" . url
                 <div class="d-inline-block position-relative text-center border-bottom pb-1" style="min-width: 180px;">
                     <div class="d-flex align-items-center justify-content-center gap-2 mb-1">
                         <?php if ($signature): ?>
-                            <img src="<?= htmlspecialchars($signature) ?>" alt="Authorized Signature" class="img-fluid" style="max-height: 40px; width: auto;">
+                            <img src="<?= htmlspecialchars($signature) ?>" alt="Authorized Signature" class="img-fluid" style="max-width: <?= (int)($company['signature_print_width'] ?? 120) ?>px; height: auto;">
                         <?php endif; ?>
                         <?php if ($stamp): ?>
-                            <img src="<?= htmlspecialchars($stamp) ?>" alt="Company Stamp" class="img-fluid" style="max-height: 40px; width: auto;">
+                            <img src="<?= htmlspecialchars($stamp) ?>" alt="Company Stamp" class="img-fluid" style="max-width: <?= (int)($company['stamp_print_width'] ?? 100) ?>px; height: auto;">
                         <?php endif; ?>
                     </div>
                     <?php if ($digSig): ?>

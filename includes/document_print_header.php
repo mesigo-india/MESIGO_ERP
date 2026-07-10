@@ -11,6 +11,16 @@ $logoPath = !empty($company['logo_path']) ? '/uploads/' . $company['logo_path'] 
 $letterheadType = $company['letterhead_type'] ?? 'plain';
 $defaultLh = !empty($company['letterhead_path']) ? '/uploads/' . $company['letterhead_path'] : null;
 ?>
+<style>
+@media print {
+    #printContainer.use-letterhead {
+        padding-top: <?= (int)($company['print_margin_top'] ?? 45) ?>mm !important;
+        padding-bottom: <?= (int)($company['print_margin_bottom'] ?? 35) ?>mm !important;
+        padding-left: <?= (int)($company['print_margin_left'] ?? 20) ?>mm !important;
+        padding-right: <?= (int)($company['print_margin_right'] ?? 20) ?>mm !important;
+    }
+}
+</style>
 <!-- Print Overlay Background -->
 <?php if ($defaultLh): ?>
     <img src="<?= htmlspecialchars($defaultLh) ?>" class="letterhead-overlay-img" id="letterheadOverlayImg">

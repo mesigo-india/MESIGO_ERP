@@ -110,15 +110,78 @@ class CompanyController extends Controller
             Response::redirect('/company/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
 
-        // Handle file uploads, retaining old values if no new files uploaded
-        $data['logo_path'] = $this->handleFileUpload('logo_file', 'logo', $existing['logo_path'] ?? null);
-        $data['stamp_path'] = $this->handleFileUpload('stamp_file', 'stamp', $existing['stamp_path'] ?? null);
-        $data['seal_path'] = $this->handleFileUpload('seal_file', 'seal', $existing['seal_path'] ?? null);
-        $data['signature_path'] = $this->handleFileUpload('signature_file', 'sig', $existing['signature_path'] ?? null);
-        $data['digital_signature_path'] = $this->handleFileUpload('digital_signature_file', 'dig_sig', $existing['digital_signature_path'] ?? null);
-        $data['letterhead_path'] = $this->handleFileUpload('letterhead_file', 'lh', $existing['letterhead_path'] ?? null);
-        $data['letterhead_export_path'] = $this->handleFileUpload('letterhead_export_file', 'lh_exp', $existing['letterhead_export_path'] ?? null);
-        $data['letterhead_domestic_path'] = $this->handleFileUpload('letterhead_domestic_file', 'lh_dom', $existing['letterhead_domestic_path'] ?? null);
+        // Handle file uploads, retaining old values if no new files uploaded, or nullifying if removal is requested
+        if (isset($_POST['remove_logo']) && $_POST['remove_logo'] === '1') {
+            if (!empty($existing['logo_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['logo_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['logo_path']);
+            }
+            $data['logo_path'] = null;
+        } else {
+            $data['logo_path'] = $this->handleFileUpload('logo_file', 'logo', $existing['logo_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_stamp']) && $_POST['remove_stamp'] === '1') {
+            if (!empty($existing['stamp_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['stamp_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['stamp_path']);
+            }
+            $data['stamp_path'] = null;
+        } else {
+            $data['stamp_path'] = $this->handleFileUpload('stamp_file', 'stamp', $existing['stamp_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_seal']) && $_POST['remove_seal'] === '1') {
+            if (!empty($existing['seal_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['seal_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['seal_path']);
+            }
+            $data['seal_path'] = null;
+        } else {
+            $data['seal_path'] = $this->handleFileUpload('seal_file', 'seal', $existing['seal_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_signature']) && $_POST['remove_signature'] === '1') {
+            if (!empty($existing['signature_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['signature_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['signature_path']);
+            }
+            $data['signature_path'] = null;
+        } else {
+            $data['signature_path'] = $this->handleFileUpload('signature_file', 'sig', $existing['signature_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_digital_signature']) && $_POST['remove_digital_signature'] === '1') {
+            if (!empty($existing['digital_signature_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['digital_signature_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['digital_signature_path']);
+            }
+            $data['digital_signature_path'] = null;
+        } else {
+            $data['digital_signature_path'] = $this->handleFileUpload('digital_signature_file', 'dig_sig', $existing['digital_signature_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_letterhead']) && $_POST['remove_letterhead'] === '1') {
+            if (!empty($existing['letterhead_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_path']);
+            }
+            $data['letterhead_path'] = null;
+        } else {
+            $data['letterhead_path'] = $this->handleFileUpload('letterhead_file', 'lh', $existing['letterhead_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_letterhead_export']) && $_POST['remove_letterhead_export'] === '1') {
+            if (!empty($existing['letterhead_export_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_export_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_export_path']);
+            }
+            $data['letterhead_export_path'] = null;
+        } else {
+            $data['letterhead_export_path'] = $this->handleFileUpload('letterhead_export_file', 'lh_exp', $existing['letterhead_export_path'] ?? null);
+        }
+
+        if (isset($_POST['remove_letterhead_domestic']) && $_POST['remove_letterhead_domestic'] === '1') {
+            if (!empty($existing['letterhead_domestic_path']) && file_exists(APP_ROOT . '/uploads/' . $existing['letterhead_domestic_path'])) {
+                @unlink(APP_ROOT . '/uploads/' . $existing['letterhead_domestic_path']);
+            }
+            $data['letterhead_domestic_path'] = null;
+        } else {
+            $data['letterhead_domestic_path'] = $this->handleFileUpload('letterhead_domestic_file', 'lh_dom', $existing['letterhead_domestic_path'] ?? null);
+        }
 
         $this->company->update((int) $id, $data);
         $this->logger->info('Company updated', ['company_id' => (int) $id]);
@@ -195,6 +258,13 @@ class CompanyController extends Controller
             'country' => trim((string) ($_POST['country'] ?? '')),
             'zip' => trim((string) ($_POST['zip'] ?? '')),
             'status' => (int) ($_POST['status'] ?? 1),
+            'print_margin_top' => (int) ($_POST['print_margin_top'] ?? 45),
+            'print_margin_bottom' => (int) ($_POST['print_margin_bottom'] ?? 35),
+            'print_margin_left' => (int) ($_POST['print_margin_left'] ?? 20),
+            'print_margin_right' => (int) ($_POST['print_margin_right'] ?? 20),
+            'signature_print_width' => (int) ($_POST['signature_print_width'] ?? 120),
+            'seal_print_width' => (int) ($_POST['seal_print_width'] ?? 100),
+            'stamp_print_width' => (int) ($_POST['stamp_print_width'] ?? 100),
         ];
     }
 

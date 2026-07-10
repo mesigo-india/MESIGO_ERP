@@ -11,3 +11,5 @@
 [2026-07-09 04:50:47] [INFO] [User: 1] [IP: ::1] Permission updated {"permission_id":13}
 [2026-07-09 05:53:52] [INFO] [User: 1] [IP: ::1] User logged in {"user_id":1}
 [2026-07-09 17:13:35] [INFO] [User: 1] [IP: ::1] Product created {"product_id":3}
+[2026-07-10 08:08:34] [INFO] [User: 1] [IP: ::1] Company updated {"company_id":2}
+[2026-07-10 08:14:03] [INFO] [User: 1] [IP: ::1] User updated {"user_id":1}

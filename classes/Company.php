@@ -35,14 +35,18 @@ class Company
                 bank_name, account_name, account_number, ifsc_code, swift_code,
                 logo_path, stamp_path, seal_path, signature_path, digital_signature_path,
                 letterhead_type, letterhead_path, letterhead_export_path, letterhead_domestic_path,
-                declaration, status, created_at
+                declaration, status, created_at,
+                print_margin_top, print_margin_bottom, print_margin_left, print_margin_right,
+                signature_print_width, seal_print_width, stamp_print_width
             ) VALUES (
                 :company_name, :address, :contact_person, :email, :phone, :website,
                 :gst_number, :iec_code, :pan_number, :cin_number, :apeda_number, :fssai_number, :iso_number, :haccp_number,
                 :bank_name, :account_name, :account_number, :ifsc_code, :swift_code,
                 :logo_path, :stamp_path, :seal_path, :signature_path, :digital_signature_path,
                 :letterhead_type, :letterhead_path, :letterhead_export_path, :letterhead_domestic_path,
-                :declaration, :status, NOW()
+                :declaration, :status, NOW(),
+                :print_margin_top, :print_margin_bottom, :print_margin_left, :print_margin_right,
+                :signature_print_width, :seal_print_width, :stamp_print_width
             )
         ");
 
@@ -64,7 +68,11 @@ class Company
                 bank_name = :bank_name, account_name = :account_name, account_number = :account_number, ifsc_code = :ifsc_code, swift_code = :swift_code,
                 logo_path = :logo_path, stamp_path = :stamp_path, seal_path = :seal_path, signature_path = :signature_path, digital_signature_path = :digital_signature_path,
                 letterhead_type = :letterhead_type, letterhead_path = :letterhead_path, letterhead_export_path = :letterhead_export_path, letterhead_domestic_path = :letterhead_domestic_path,
-                declaration = :declaration, status = :status, updated_at = NOW()
+                declaration = :declaration, status = :status, updated_at = NOW(),
+                print_margin_top = :print_margin_top, print_margin_bottom = :print_margin_bottom,
+                print_margin_left = :print_margin_left, print_margin_right = :print_margin_right,
+                signature_print_width = :signature_print_width, seal_print_width = :seal_print_width,
+                stamp_print_width = :stamp_print_width
             WHERE id = :id
         ");
 
@@ -122,6 +130,13 @@ class Company
             
             'declaration' => $data['declaration'] ?? null,
             'status' => (int) ($data['status'] ?? 1),
+            'print_margin_top' => (int) ($data['print_margin_top'] ?? 45),
+            'print_margin_bottom' => (int) ($data['print_margin_bottom'] ?? 35),
+            'print_margin_left' => (int) ($data['print_margin_left'] ?? 20),
+            'print_margin_right' => (int) ($data['print_margin_right'] ?? 20),
+            'signature_print_width' => (int) ($data['signature_print_width'] ?? 120),
+            'seal_print_width' => (int) ($data['seal_print_width'] ?? 100),
+            'stamp_print_width' => (int) ($data['stamp_print_width'] ?? 100),
         ];
     }
 }
