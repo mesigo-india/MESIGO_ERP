@@ -512,4 +512,20 @@ class BuyerController extends Controller
         $stmt->execute([(int)($stateId ?? 0), trim((string)$cityValue)]);
         return (int)$db->lastInsertId();
     }
+
+    public function details(string $id): void
+    {
+        $this->requireLogin();
+        header('Content-Type: application/json');
+        try {
+            $buyer = $this->buyers->findById((int)$id);
+            if (!$buyer) {
+                echo json_encode(['success' => false, 'message' => 'Buyer not found']);
+                return;
+            }
+            echo json_encode(['success' => true, 'buyer' => $buyer]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
 }

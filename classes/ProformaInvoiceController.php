@@ -84,6 +84,10 @@ class ProformaInvoiceController extends Controller
         $this->requireLogin();
         $this->requirePermission('proforma_invoices.update');
         $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $status = (int) ($invoice['status'] ?? 0);
+        if ($status !== ProformaInvoice::STATUS_DRAFT && $status !== ProformaInvoice::STATUS_REJECTED) {
+            Response::redirect('/proforma-invoices/' . (int) $id, 'Only draft or rejected proforma invoices can be modified.');
+        }
         $this->renderForm(
             'Edit Proforma Invoice',
             $invoice,
@@ -100,7 +104,11 @@ class ProformaInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/proforma-invoices/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $status = (int) ($invoice['status'] ?? 0);
+        if ($status !== ProformaInvoice::STATUS_DRAFT && $status !== ProformaInvoice::STATUS_REJECTED) {
+            Response::redirect('/proforma-invoices/' . (int) $id, 'Only draft or rejected proforma invoices can be modified.');
+        }
         $data = $this->invoiceDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateInvoice($data);

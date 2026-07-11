@@ -90,6 +90,10 @@ class PackingListController extends Controller
         $this->requireLogin();
         $this->requirePermission('packing_lists.update');
         $packingList = $this->findPackingListOrRedirect((int) $id);
+        $status = (int) ($packingList['status'] ?? 0);
+        if ($status !== PackingList::STATUS_DRAFT && $status !== PackingList::STATUS_REJECTED) {
+            Response::redirect('/packing-lists/' . (int) $id, 'Only draft or rejected packing lists can be modified.');
+        }
         $this->renderForm('Edit Packing List', $packingList, $this->packingLists->meta($packingList['internal_notes'] ?? null), $this->enrichItems($this->packingLists->getItems((int) $id)) ?: [[]], '/packing-lists/' . (int) $id);
     }
 
@@ -100,7 +104,11 @@ class PackingListController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/packing-lists/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findPackingListOrRedirect((int) $id);
+        $packingList = $this->findPackingListOrRedirect((int) $id);
+        $status = (int) ($packingList['status'] ?? 0);
+        if ($status !== PackingList::STATUS_DRAFT && $status !== PackingList::STATUS_REJECTED) {
+            Response::redirect('/packing-lists/' . (int) $id, 'Only draft or rejected packing lists can be modified.');
+        }
         $data = $this->packingListDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validatePackingList($data);

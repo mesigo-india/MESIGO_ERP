@@ -346,4 +346,20 @@ class ProductController extends Controller
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
     }
+
+    public function details(string $id): void
+    {
+        $this->requireLogin();
+        header('Content-Type: application/json');
+        try {
+            $product = $this->products->findById((int)$id);
+            if (!$product) {
+                echo json_encode(['success' => false, 'message' => 'Product not found']);
+                return;
+            }
+            echo json_encode(['success' => true, 'product' => $product]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
 }

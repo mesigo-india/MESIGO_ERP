@@ -50,6 +50,7 @@ $router->post('/buyers', 'BuyerController@store');
 $router->get('/buyers/{id}/edit', 'BuyerController@edit');
 $router->post('/buyers/{id}', 'BuyerController@update');
 $router->post('/buyers/{id}/delete', 'BuyerController@delete');
+$router->get('/buyers/{id}/details', 'BuyerController@details');
 
 // Supplier CRM Routes
 $router->get('/suppliers', 'SupplierController@index');
@@ -58,6 +59,7 @@ $router->post('/suppliers', 'SupplierController@store');
 $router->get('/suppliers/{id}/edit', 'SupplierController@edit');
 $router->post('/suppliers/{id}', 'SupplierController@update');
 $router->post('/suppliers/{id}/delete', 'SupplierController@delete');
+$router->get('/suppliers/{id}/details', 'SupplierController@details');
 
 // Product Master Routes
 $router->get('/products', 'ProductController@index');
@@ -66,6 +68,7 @@ $router->post('/products', 'ProductController@store');
 $router->get('/products/{id}/edit', 'ProductController@edit');
 $router->post('/products/{id}', 'ProductController@update');
 $router->post('/products/{id}/delete', 'ProductController@delete');
+$router->get('/products/{id}/details', 'ProductController@details');
 
 // Quotation Engine Routes
 $router->get('/quotations', 'QuotationController@index');
@@ -191,6 +194,7 @@ $router->get('/settings/master-data/{key}', 'ProductMasterDataController@index')
 $router->get('/settings/master-data/{key}/create', 'ProductMasterDataController@create');
 $router->post('/settings/master-data/{key}', 'ProductMasterDataController@store');
 $router->get('/settings/master-data/{key}/options', 'ProductMasterDataController@options');
+$router->get('/settings/master-data/{key}/{id}/details', 'ProductMasterDataController@details');
 $router->post('/settings/master-data/{key}/quick-store', 'ProductMasterDataController@quickStore');
 $router->get('/settings/master-data/{key}/{id}/edit', 'ProductMasterDataController@edit');
 $router->post('/settings/master-data/{key}/{id}', 'ProductMasterDataController@update');

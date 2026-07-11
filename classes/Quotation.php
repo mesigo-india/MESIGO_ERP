@@ -217,9 +217,28 @@ class Quotation
             $gst += $lineGst;
         }
 
-        $freight = (float) ($charges['freight'] ?? 0);
-        $insurance = (float) ($charges['insurance'] ?? 0);
-        $other = (float) ($charges['other_charges'] ?? 0);
+        $freight = 0.0;
+        $insurance = 0.0;
+        $other = 0.0;
+
+        if (isset($charges[0]) && is_array($charges[0])) {
+            foreach ($charges as $charge) {
+                $name = strtolower(trim((string) ($charge['charge_name'] ?? '')));
+                $amount = (float) ($charge['charge_amount'] ?? 0);
+                if (str_contains($name, 'freight')) {
+                    $freight += $amount;
+                } elseif (str_contains($name, 'insurance')) {
+                    $insurance += $amount;
+                } else {
+                    $other += $amount;
+                }
+            }
+        } else {
+            $freight = (float) ($charges['freight'] ?? 0);
+            $insurance = (float) ($charges['insurance'] ?? 0);
+            $other = (float) ($charges['other_charges'] ?? 0);
+        }
+
         $grand = $subtotal - $discount + $gst + $freight + $insurance + $other;
 
         return compact('subtotal', 'discount', 'gst', 'freight', 'insurance', 'other', 'grand');
@@ -276,6 +295,17 @@ class Quotation
             require_once APP_ROOT . '/classes/TaxCalculationEngine.php';
             $taxEngine = new TaxCalculationEngine($this->db);
             $taxEngine->calculateTax($id);
+
+            // Calculate final totals and save to internal_notes
+            $updatedItems = $this->getItems($id);
+            $calculatedTotals = $this->totals($updatedItems, $data['charges'] ?? []);
+            $meta['totals'] = $calculatedTotals;
+            
+            $stmtMeta = $this->db->prepare("UPDATE document_headers SET internal_notes = :notes WHERE id = :id");
+            $stmtMeta->execute([
+                'notes' => json_encode($meta),
+                'id' => $id
+            ]);
 
             // Execute dynamic profitability cost evaluations
             require_once APP_ROOT . '/classes/CurrencyConversionEngine.php';

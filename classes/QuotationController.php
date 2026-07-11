@@ -94,6 +94,11 @@ class QuotationController extends Controller
         $this->requirePermission('quotations.update');
 
         $quotation = $this->findQuotationOrRedirect((int) $id);
+        $status = (int) ($quotation['status'] ?? 0);
+        if ($status !== Quotation::STATUS_DRAFT && $status !== Quotation::STATUS_REJECTED) {
+            Response::redirect('/quotations/' . (int) $id, 'Only draft or rejected quotations can be modified.');
+        }
+
         $items = $this->enrichItems($this->quotations->getItems((int) $id));
         $meta = $this->quotations->meta($quotation['internal_notes'] ?? null);
 
@@ -109,7 +114,12 @@ class QuotationController extends Controller
             Response::redirect('/quotations/' . (int) $id . '/edit', 'Invalid security token.');
         }
 
-        $this->findQuotationOrRedirect((int) $id);
+        $quotation = $this->findQuotationOrRedirect((int) $id);
+        $status = (int) ($quotation['status'] ?? 0);
+        if ($status !== Quotation::STATUS_DRAFT && $status !== Quotation::STATUS_REJECTED) {
+            Response::redirect('/quotations/' . (int) $id, 'Only draft or rejected quotations can be modified.');
+        }
+
         $data = $this->quotationDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateQuotation($data);

@@ -396,4 +396,20 @@ class SupplierController extends Controller
         
         $this->suppliers->saveBankDetails($supplierId, $_POST['banks'] ?? []);
     }
+
+    public function details(string $id): void
+    {
+        $this->requireLogin();
+        header('Content-Type: application/json');
+        try {
+            $supplier = $this->suppliers->findById((int)$id);
+            if (!$supplier) {
+                echo json_encode(['success' => false, 'message' => 'Supplier not found']);
+                return;
+            }
+            echo json_encode(['success' => true, 'supplier' => $supplier]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
 }

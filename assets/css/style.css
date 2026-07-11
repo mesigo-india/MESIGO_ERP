@@ -199,7 +199,7 @@
     position: relative;
 }
 
-.letterhead-overlay {
+.letterhead-overlay-img {
     position: absolute;
     top: 0;
     left: 0;
@@ -207,14 +207,31 @@
     height: 100%;
     z-index: 1;
     pointer-events: none;
-    background-size: cover;
-    background-position: center;
+    object-fit: fill;
+    display: none;
+}
+
+#printContainer.use-letterhead .letterhead-overlay-img {
+    display: block;
 }
 
 .letterhead-content-body {
     position: relative;
     z-index: 2;
     padding: 40mm 15mm 30mm 15mm; /* Dynamic padding to align content correctly inside letterhead bounds */
+    transition: padding 0.2s ease;
+}
+
+#printContainer:not(.use-letterhead) .letterhead-content-body {
+    padding: 10mm 15mm 15mm 15mm;
+}
+
+#printContainer.use-letterhead .company-header-block {
+    display: none !important;
+}
+
+#printContainer:not(.use-letterhead) .company-header-block {
+    display: block !important;
 }
 
 /* General Print layout controls */

@@ -24,6 +24,16 @@ $defaultLh = !empty($company['letterhead_path']) ? '/uploads/' . $company['lette
 <!-- Print Overlay Background -->
 <?php if ($defaultLh): ?>
     <img src="<?= htmlspecialchars($defaultLh) ?>" class="letterhead-overlay-img" id="letterheadOverlayImg">
+    <?php if ($letterheadType === 'letterhead'): ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var container = document.getElementById('printContainer');
+            var overlay = document.getElementById('letterheadOverlayImg');
+            if (container) container.classList.add('use-letterhead');
+            if (overlay) overlay.style.display = 'block';
+        });
+    </script>
+    <?php endif; ?>
 <?php endif; ?>
 
 <!-- Plain Paper Company Branding Block -->

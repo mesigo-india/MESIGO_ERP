@@ -49,13 +49,22 @@ class Validator
         }
     }
     
+    private function formatFieldName(string $field): string
+    {
+        if (str_ends_with($field, '_id')) {
+            $field = substr($field, 0, -3);
+        }
+        return ucwords(str_replace('_', ' ', $field));
+    }
+
     /**
      * Required validation
      */
     private function validateRequired(string $field, mixed $value, array $params, array $data): void
     {
         if (empty($value) && $value !== '0') {
-            $this->errors[$field][] = "{$field} is required";
+            $label = $this->formatFieldName($field);
+            $this->errors[$field][] = "{$label} is required";
         }
     }
     
@@ -65,7 +74,8 @@ class Validator
     private function validateEmail(string $field, mixed $value, array $params, array $data): void
     {
         if (!empty($value) && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
-            $this->errors[$field][] = "{$field} must be a valid email";
+            $label = $this->formatFieldName($field);
+            $this->errors[$field][] = "{$label} must be a valid email";
         }
     }
     
@@ -76,7 +86,8 @@ class Validator
     {
         $min = (int) ($params[0] ?? 0);
         if (strlen((string) $value) < $min) {
-            $this->errors[$field][] = "{$field} must be at least {$min} characters";
+            $label = $this->formatFieldName($field);
+            $this->errors[$field][] = "{$label} must be at least {$min} characters";
         }
     }
     
@@ -87,7 +98,8 @@ class Validator
     {
         $max = (int) ($params[0] ?? 0);
         if (strlen((string) $value) > $max) {
-            $this->errors[$field][] = "{$field} must not exceed {$max} characters";
+            $label = $this->formatFieldName($field);
+            $this->errors[$field][] = "{$label} must not exceed {$max} characters";
         }
     }
     
@@ -112,7 +124,8 @@ class Validator
         $stmt->execute(['value' => $value]);
         
         if ($stmt->fetchColumn() > 0) {
-            $this->errors[$field][] = "{$field} already exists";
+            $label = $this->formatFieldName($field);
+            $this->errors[$field][] = "{$label} already exists";
         }
     }
     

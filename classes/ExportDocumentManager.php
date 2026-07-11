@@ -12,6 +12,8 @@ class ExportDocumentManager
 
     public function __construct(private PDO $db)
     {
+        require_once APP_ROOT . '/classes/AttachmentManager.php';
+        require_once APP_ROOT . '/classes/DocumentStatusEngine.php';
         $this->attachments = new AttachmentManager($db);
         $this->statusEngine = new DocumentStatusEngine($db);
     }

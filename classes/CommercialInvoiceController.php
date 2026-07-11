@@ -21,6 +21,7 @@ class CommercialInvoiceController extends Controller
         require_once APP_ROOT . '/classes/Quotation.php';
         require_once APP_ROOT . '/classes/ProformaInvoice.php';
         require_once APP_ROOT . '/classes/CommercialInvoice.php';
+        require_once APP_ROOT . '/classes/AttachmentManager.php';
         $this->invoices = new CommercialInvoice(Database::getInstance());
         $this->validator = new Validator();
     }
@@ -85,6 +86,10 @@ class CommercialInvoiceController extends Controller
         $this->requireLogin();
         $this->requirePermission('commercial_invoices.update');
         $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $status = (int) ($invoice['status'] ?? 0);
+        if ($status !== CommercialInvoice::STATUS_DRAFT && $status !== CommercialInvoice::STATUS_REJECTED) {
+            Response::redirect('/commercial-invoices/' . (int) $id, 'Only draft or rejected commercial invoices can be modified.');
+        }
         $this->renderForm('Edit Commercial Invoice', $invoice, $this->invoices->meta($invoice['internal_notes'] ?? null), $this->enrichItems($this->invoices->getItems((int) $id)) ?: [[]], '/commercial-invoices/' . (int) $id);
     }
 
@@ -95,7 +100,11 @@ class CommercialInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/commercial-invoices/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $status = (int) ($invoice['status'] ?? 0);
+        if ($status !== CommercialInvoice::STATUS_DRAFT && $status !== CommercialInvoice::STATUS_REJECTED) {
+            Response::redirect('/commercial-invoices/' . (int) $id, 'Only draft or rejected commercial invoices can be modified.');
+        }
         $data = $this->invoiceDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateInvoice($data);

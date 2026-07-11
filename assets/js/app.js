@@ -100,12 +100,14 @@
     }
     
     // Toastr configuration
-    toastr.options = {
-        closeButton: true,
-        progressBar: true,
-        positionClass: 'toast-top-right',
-        timeOut: 5000
-    };
+    if (typeof toastr !== 'undefined') {
+        toastr.options = {
+            closeButton: true,
+            progressBar: true,
+            positionClass: 'toast-top-right',
+            timeOut: 5000
+        };
+    }
 
     function initMasterDataQuickAdd() {
         const selects = document.querySelectorAll('select[data-master]');
@@ -189,5 +191,106 @@
                 errorBox.classList.remove('d-none');
             });
     }
-    
+
+    // =========================================================================
+    // GLOBAL AUTO FETCH ENGINE (STABILIZATION PHASE)
+    // =========================================================================
+    function initGlobalAutoFetch() {
+        // 1. Buyer Auto Fetch
+        $(document).on('change', '#buyer_id', function() {
+            const buyerId = $(this).val();
+            if (!buyerId || buyerId === '0') return;
+            
+            $.ajax({
+                url: '/buyers/' + buyerId + '/details',
+                method: 'GET',
+                dataType: 'json',
+                success: function(res) {
+                    if (res.success && res.buyer) {
+                        const b = res.buyer;
+                        if (b.payment_terms && $('#payment_terms_id').length) {
+                            $('#payment_terms_id').val(b.payment_terms).trigger('change');
+                        }
+                        if (b.currency_id && $('#currency_id').length) {
+                            $('#currency_id').val(b.currency_id).trigger('change');
+                        }
+                        if (b.country && $('#destination_country_id').length) {
+                            $('#destination_country_id').val(b.country).trigger('change');
+                        }
+                    }
+                }
+            });
+        });
+
+        // 2. Product Auto Fetch (Grid)
+        $(document).on('change', 'select[name="product_id[]"]', function() {
+            console.log("[DEBUG] Product Select Changed!");
+            const productId = $(this).val();
+            console.log("[DEBUG] Selected productId:", productId);
+            if (!productId || productId === '0') return;
+            
+            // Find the parent tbody group since we restructured the grid
+            const tbody = $(this).closest('.product-line-group');
+            console.log("[DEBUG] Found tbody group:", tbody.length);
+            
+            $.ajax({
+                url: '/products/' + productId + '/details',
+                method: 'GET',
+                dataType: 'json',
+                success: function(res) {
+                    console.log("[DEBUG] AJAX Success response:", res);
+                    if (res.success && res.product) {
+                        const p = res.product;
+                        // Map Product fields to Quotation/Grid fields precisely matching our HTML
+                        if (p.hsn_code) tbody.find('input[name="hsn_code[]"]').val(p.hsn_code);
+                        if (p.description) tbody.find('input[name="description[]"]').val(p.description);
+                        if (p.specification) tbody.find('input[name="specification[]"]').val(p.specification);
+                        
+                        console.log("[DEBUG] Populated basic input fields.");
+                        
+                        if (p.unit_id) {
+                            const unitSelect = tbody.find('select[name="unit_id[]"]');
+                            if (unitSelect.length) {
+                                unitSelect.val(p.unit_id);
+                                if(unitSelect.hasClass('select2-hidden-accessible')) {
+                                    unitSelect.trigger('change.select2');
+                                } else {
+                                    unitSelect.trigger('change');
+                                }
+                            }
+                        }
+                        
+                        if (p.packing_type_id) {
+                            const packingSelect = tbody.find('select[name="packing_type_id[]"]');
+                            if (packingSelect.length) packingSelect.val(p.packing_type_id).trigger('change');
+                        }
+                        
+                        // Note: Product master might not have grade_id or warehouse_id natively, 
+                        // but if it does, we map them here.
+                        if (p.grade_id) {
+                            const gradeSelect = tbody.find('select[name="grade_id[]"]');
+                            if (gradeSelect.length) gradeSelect.val(p.grade_id).trigger('change');
+                        }
+                        
+                        if (p.country_of_origin || p.origin_id) {
+                            const originSelect = tbody.find('select[name="origin_id[]"]');
+                            const originVal = p.origin_id || p.country_of_origin;
+                            if (originSelect.length && originVal) originSelect.val(originVal).trigger('change');
+                        }
+
+                        // Trigger calculation update via the globally available calculate function
+                        if (typeof window.calculate === 'function') {
+                            window.calculate();
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // Initialize Auto Fetch on ready
+    $(document).ready(function() {
+        initGlobalAutoFetch();
+    });
+
 })(jQuery);

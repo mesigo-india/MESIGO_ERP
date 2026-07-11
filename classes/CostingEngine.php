@@ -41,7 +41,7 @@ class CostingEngine
         $baseCurrId = $this->currencyEngine->getBaseCurrencyId();
 
         // 2. Calculate Total Invoice Sales Revenue (Base Currency)
-        $stmt = $this->db->prepare("SELECT SUM(amount) FROM document_items WHERE document_header_id = :id");
+        $stmt = $this->db->prepare("SELECT SUM(net_amount - tax_amount) FROM document_items WHERE document_header_id = :id");
         $stmt->execute(['id' => $documentId]);
         $revenueTransacted = (float) ($stmt->fetchColumn() ?: 0.0);
         

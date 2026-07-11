@@ -92,7 +92,22 @@ class ProductMasterDataController extends Controller
     private function deleteFor(string $key, int $id): void { $this->requireLogin(); $this->requirePermission('settings.delete'); if (!$this->validateCsrf()) Response::redirect('/settings/master-data/' . $key, 'Invalid security token.'); $config = $this->config($key); $this->disable($config, $id); Response::redirect('/settings/master-data/' . $key, $config['singular'] . ' disabled successfully.'); }
     private function optionsFor(string $key): void { $this->requireLogin(); Response::success('', ['options' => $this->optionRows($this->config($key))]); }
     private function quickStoreFor(string $key): void { $this->requireLogin(); $this->requirePermission('settings.create'); if (!$this->validateCsrf()) Response::error('Invalid security token.', [], 403); $config = $this->config($key); $data = $this->dataFromRequest($config); $errors = $this->validateData($config, $data); if ($errors) Response::error($this->formatValidationErrors($errors), $errors, 422); if ($this->duplicateExists($config, $data)) Response::error('Duplicate name or code already exists.', [], 422); $id = $this->insert($config, $data); Response::success($config['singular'] . ' created successfully.', ['option' => $this->formatOption($config, $this->find($config, $id) ?: ['id' => $id] + $data)]); }
-
+    
+    public function details(string $key, string $id): void {
+        $this->requireLogin();
+        header('Content-Type: application/json');
+        try {
+            $config = $this->config($key);
+            $row = $this->find($config, (int)$id);
+            if (!$row) {
+                echo json_encode(['success' => false, 'message' => $config['singular'] . ' not found']);
+                return;
+            }
+            echo json_encode(['success' => true, 'data' => $row]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
     private function rows(array $config, string $search, string $status, int $page): array {
         [$where, $params] = $this->filters($config, $search, $status);
         $hasCreatedAt = false;

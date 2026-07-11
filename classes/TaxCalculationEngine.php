@@ -66,7 +66,7 @@ class TaxCalculationEngine
         // 4. Calculate tax line-by-line
         foreach ($items as $item) {
             $itemId = (int) $item['id'];
-            $amount = (float) $item['amount'];
+            $amount = (float)($item['quantity'] ?? 0) * (float)($item['rate'] ?? 0) - (float)($item['discount_amount'] ?? 0);
             
             // Resolve active tax rate slab
             $rate = 0.0;
@@ -129,18 +129,6 @@ class TaxCalculationEngine
 
         $taxSummary['total'] = $totalTax;
 
-        // 5. Update document header totals
-        $updateStmt = $this->db->prepare("
-            UPDATE document_headers 
-            SET tax_amount = :tax, 
-                total_amount = (SELECT SUM(net_amount) FROM document_items WHERE document_header_id = :id)
-            WHERE id = :id
-        ");
-        $updateStmt->execute([
-            'tax' => $totalTax,
-            'id' => $documentId
-        ]);
-
         return $taxSummary;
     }
 
@@ -166,16 +154,24 @@ class TaxCalculationEngine
 
         // Fetch buyer primary state
         $stmt = $this->db->prepare("
-            SELECT state FROM buyer_addresses 
-            WHERE buyer_id = :buyer_id AND is_primary = 1 
+            SELECT s.name 
+            FROM buyer_addresses ba
+            JOIN states s ON ba.state_id = s.id
+            WHERE ba.buyer_id = :buyer_id AND ba.address_type = 'billing' 
             LIMIT 1
         ");
         $stmt->execute(['buyer_id' => $buyerId]);
         $buyerState = strtoupper(trim((string) ($stmt->fetchColumn() ?: '')));
 
         if ($buyerState === '') {
-            // Try general state column in buyers table if exists
-            $stmt = $this->db->prepare("SELECT state FROM buyers WHERE id = :id LIMIT 1");
+            // Try general state_id column in buyers table if exists
+            $stmt = $this->db->prepare("
+                SELECT s.name 
+                FROM buyers b
+                JOIN states s ON b.state_id = s.id
+                WHERE b.id = :id 
+                LIMIT 1
+            ");
             $stmt->execute(['id' => $buyerId]);
             $buyerState = strtoupper(trim((string) ($stmt->fetchColumn() ?: '')));
         }
