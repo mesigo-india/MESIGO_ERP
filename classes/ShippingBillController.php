@@ -87,6 +87,9 @@ class ShippingBillController extends Controller
         $this->requireLogin();
         $this->requirePermission('shipping_bills.update');
         $shippingBill = $this->findShippingBillOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($shippingBill, '/shipping-bills', 'shipping_bill');
+
         $this->renderForm('Edit Shipping Bill', $shippingBill, $this->shippingBills->meta($shippingBill['internal_notes'] ?? null), $this->enrichItems($this->shippingBills->getItems((int) $id)) ?: [[]], '/shipping-bills/' . (int) $id);
     }
 
@@ -97,7 +100,10 @@ class ShippingBillController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/shipping-bills/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findShippingBillOrRedirect((int) $id);
+        $shippingBill = $this->findShippingBillOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($shippingBill, '/shipping-bills', 'shipping_bill');
+
         $data = $this->shippingBillDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateShippingBill($data);
@@ -105,6 +111,7 @@ class ShippingBillController extends Controller
             Response::redirect('/shipping-bills/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->shippingBills->update((int) $id, $data);
+        $this->logLifecycleAudit('Edit', 'shipping_bill', (int)$id, $shippingBill['document_number'], (int)$shippingBill['status'], (int)$shippingBill['status'], 'Shipping Bill updated');
         Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill updated successfully.');
     }
 
@@ -115,8 +122,20 @@ class ShippingBillController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
         }
-        $this->findShippingBillOrRedirect((int) $id);
-        $this->shippingBills->updateStatus((int) $id, (int) ($_POST['status'] ?? ShippingBill::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $shippingBill = $this->findShippingBillOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? ShippingBill::STATUS_DRAFT);
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$shippingBill['status'], $statusId, '/shipping-bills');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->shippingBills->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'shipping_bill', (int)$id, $shippingBill['document_number'], (int)$shippingBill['status'], $statusId, $remarks);
+
         Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill status updated.');
     }
 
@@ -127,14 +146,29 @@ class ShippingBillController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
         }
-        $this->findShippingBillOrRedirect((int) $id);
-        $this->shippingBills->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'Shipping Bill revision saved')), $this->currentUserId());
-        Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/shipping-bills', 'shipping_bill', $this->shippingBills);
+        Response::redirect('/shipping-bills/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('shipping_bills.view');
+
+        $shippingBill = $this->findShippingBillOrRedirect((int) $id);
+        $items = $this->enrichItems($this->shippingBills->getItems((int) $id));
+        $meta = $this->shippingBills->meta($shippingBill['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'shipping_bill', (int)$id, $shippingBill['document_number'], (int)$shippingBill['status'], (int)$shippingBill['status'], 'Document printed');
+
+        $this->renderPrint('shipping_bills/print', [
+            'title' => 'Shipping Bill ' . $shippingBill['document_number'],
+            'shippingBill' => $shippingBill,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\ShippingBill::statuses(),
+            'revisions' => $this->shippingBills->revisions((int) $id),
+        ]);
     }
 
     public function email(string $id): void
@@ -155,6 +189,30 @@ class ShippingBillController extends Controller
         $this->findShippingBillOrRedirect((int) $id);
         $billOfLadingId = $this->shippingBills->convertToBillOfLading((int) $id, (int) $this->currentUserId());
         Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill converted to Bill of Lading reference #' . $billOfLadingId . '.');
+    }
+
+    public function convertCo(string $id): void
+    {
+        $this->requireLogin();
+        $this->requirePermission('shipping_bills.convert');
+        if (!$this->validateCsrf()) {
+            Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findShippingBillOrRedirect((int) $id);
+        $coId = $this->shippingBills->convertToCertificateOfOrigin((int) $id, (int) $this->currentUserId());
+        Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill converted to Certificate of Origin reference #' . $coId . '.');
+    }
+
+    public function convertPhyto(string $id): void
+    {
+        $this->requireLogin();
+        $this->requirePermission('shipping_bills.convert');
+        if (!$this->validateCsrf()) {
+            Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
+        }
+        $this->findShippingBillOrRedirect((int) $id);
+        $phytoId = $this->shippingBills->convertToPhytosanitary((int) $id, (int) $this->currentUserId());
+        Response::redirect('/shipping-bills/' . (int) $id, 'Shipping Bill converted to Phytosanitary Certificate reference #' . $phytoId . '.');
     }
 
     private function renderForm(string $title, ?array $shippingBill, array $meta, array $items, string $action): void
@@ -251,17 +309,10 @@ class ShippingBillController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/shipping-bills/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/shipping-bills/' . (int) $id, 'Invalid security token.');
         }
-        $this->findShippingBillOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/shipping-bills', 'Shipping Bill deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/shipping-bills', 'shipping_bills');
     }
 
     private function formatValidationErrors(array $errors): string

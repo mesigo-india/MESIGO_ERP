@@ -74,6 +74,9 @@ class BillOfLadingController extends Controller
         $this->requireLogin();
         $this->requirePermission('bill_of_ladings.update');
         $bill = $this->findBillOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($bill, '/bill-of-ladings', 'bill_of_lading');
+
         $this->renderForm('Edit Bill of Lading', $bill, $this->bills->meta($bill['internal_notes'] ?? null), $this->enrichItems($this->bills->getItems((int) $id)) ?: [[]], '/bill-of-ladings/' . (int) $id);
     }
 
@@ -84,7 +87,10 @@ class BillOfLadingController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/bill-of-ladings/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findBillOrRedirect((int) $id);
+        $bill = $this->findBillOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($bill, '/bill-of-ladings', 'bill_of_lading');
+
         $data = $this->billDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateBill($data);
@@ -92,6 +98,7 @@ class BillOfLadingController extends Controller
             Response::redirect('/bill-of-ladings/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->bills->update((int) $id, $data);
+        $this->logLifecycleAudit('Edit', 'bill_of_lading', (int)$id, $bill['document_number'], (int)$bill['status'], (int)$bill['status'], 'Bill of Lading updated');
         Response::redirect('/bill-of-ladings/' . (int) $id, 'Bill of Lading updated successfully.');
     }
 
@@ -102,8 +109,20 @@ class BillOfLadingController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/bill-of-ladings/' . (int) $id, 'Invalid security token.');
         }
-        $this->findBillOrRedirect((int) $id);
-        $this->bills->updateStatus((int) $id, (int) ($_POST['status'] ?? BillOfLading::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $bill = $this->findBillOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? BillOfLading::STATUS_DRAFT);
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$bill['status'], $statusId, '/bill-of-ladings');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->bills->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'bill_of_lading', (int)$id, $bill['document_number'], (int)$bill['status'], $statusId, $remarks);
+
         Response::redirect('/bill-of-ladings/' . (int) $id, 'Bill of Lading status updated.');
     }
 
@@ -114,14 +133,29 @@ class BillOfLadingController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/bill-of-ladings/' . (int) $id, 'Invalid security token.');
         }
-        $this->findBillOrRedirect((int) $id);
-        $this->bills->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'Bill of Lading revision saved')), $this->currentUserId());
-        Response::redirect('/bill-of-ladings/' . (int) $id, 'Bill of Lading revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/bill-of-ladings', 'bill_of_lading', $this->bills);
+        Response::redirect('/bill-of-ladings/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('bill_of_ladings.view');
+
+        $bill = $this->findBillOrRedirect((int) $id);
+        $items = $this->enrichItems($this->bills->getItems((int) $id));
+        $meta = $this->bills->meta($bill['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'bill_of_lading', (int)$id, $bill['document_number'], (int)$bill['status'], (int)$bill['status'], 'Document printed');
+
+        $this->renderPrint('bill_of_ladings/print', [
+            'title' => 'Bill of Lading ' . $bill['document_number'],
+            'bill' => $bill,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\BillOfLading::statuses(),
+            'revisions' => $this->bills->revisions((int) $id),
+        ]);
     }
 
     public function convert(string $id): void
@@ -180,17 +214,10 @@ class BillOfLadingController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/bill-of-ladings/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/bill-of-ladings/' . (int) $id, 'Invalid security token.');
         }
-        $this->findBillOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/bill-of-ladings', 'Bill of Lading deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/bill-of-ladings', 'bill_of_ladings');
     }
 
     private function formatValidationErrors(array $errors): string

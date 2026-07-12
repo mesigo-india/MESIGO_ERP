@@ -260,6 +260,56 @@ $p = $product ?? [];
                             <label class="form-label fw-semibold">Shipping Marks</label>
                             <input type="text" name="shipping_marks" class="form-control" value="<?= $e('shipping_marks', $p) ?>">
                         </div>
+
+                        <!-- Enterprise Packing Intelligence specifications -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Units Per Package</label>
+                            <input type="number" step="0.0001" name="units_per_package" class="form-control" value="<?= $e('units_per_package', $p) !== '' ? $e('units_per_package', $p) : '1.0000' ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Empty Package Weight (KG)</label>
+                            <input type="number" step="0.001" name="empty_package_weight" class="form-control" value="<?= $e('empty_package_weight', $p) !== '' ? $e('empty_package_weight', $p) : '0.000' ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Gross Weight Formula</label>
+                            <input type="text" name="gross_weight_formula" class="form-control" value="<?= $e('gross_weight_formula', $p) ?>" placeholder="e.g. [net_weight]+[empty_package_weight]">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Package Length (cm)</label>
+                            <input type="number" step="0.1" name="package_length" class="form-control" value="<?= $e('package_length', $p) ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Package Width (cm)</label>
+                            <input type="number" step="0.1" name="package_width" class="form-control" value="<?= $e('package_width', $p) ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Package Height (cm)</label>
+                            <input type="number" step="0.1" name="package_height" class="form-control" value="<?= $e('package_height', $p) ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Package Material</label>
+                            <input type="text" name="package_material" class="form-control" value="<?= $e('package_material', $p) ?>" placeholder="e.g. HDPE Bag">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Stack Limit</label>
+                            <input type="number" name="stack_limit" class="form-control" value="<?= $e('stack_limit', $p) ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Pallet Configuration</label>
+                            <input type="text" name="pallet_configuration" class="form-control" value="<?= $e('pallet_configuration', $p) ?>" placeholder="e.g. 10 layers of 5 bags">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Storage Type</label>
+                            <input type="text" name="storage_type" class="form-control" value="<?= $e('storage_type', $p) ?>" placeholder="e.g. Ambient / Dry">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Loading Method</label>
+                            <input type="text" name="loading_method" class="form-control" value="<?= $e('loading_method', $p) ?>" placeholder="e.g. Loose stuffing">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Container Compatibility</label>
+                            <input type="text" name="container_compatibility" class="form-control" value="<?= $e('container_compatibility', $p) ?>" placeholder="e.g. 20FT, 40FT, 40HC">
+                        </div>
                         
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Default Shipment Type</label>

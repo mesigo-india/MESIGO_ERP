@@ -3,3 +3,6 @@
 .idea/
 .vscode/
 *.local
+.gemini/
+logs/*.log
+

@@ -21,6 +21,11 @@ class PackingList extends CommercialInvoice
         parent::__construct($db);
     }
 
+    public function convertToShippingBill(int $id, int $userId): int
+    {
+        return $this->convertTo($id, 'shipping_bill', $userId, ['status' => ShippingBill::STATUS_DRAFT]);
+    }
+
     public static function statuses(): array
     {
         return [
@@ -58,6 +63,13 @@ class PackingList extends CommercialInvoice
                 'quality' => json_encode([
                     'dimensions' => $item['dimensions'] ?? '',
                     'remarks' => $item['remarks'] ?? '',
+                    'units_per_package' => $item['units_per_package'] ?? 1.0,
+                    'cbm' => $item['cbm'] ?? 0.0,
+                    'empty_package_weight' => $item['empty_package_weight'] ?? 0.0,
+                    'total_qty' => $item['total_qty'] ?? 0.0,
+                    'pallet_count' => $item['pallet_count'] ?? 0.0,
+                    'net_weight_per_package' => $item['net_weight_per_package'] ?? 0.0,
+                    'gross_weight_formula' => $item['gross_weight_formula'] ?? ''
                 ]),
                 'packing_type_id' => (int) ($item['packing_type_id'] ?? 0) ?: null,
                 'unit_id' => (int) ($item['unit_id'] ?? 0) ?: null,

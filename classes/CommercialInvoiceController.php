@@ -86,10 +86,9 @@ class CommercialInvoiceController extends Controller
         $this->requireLogin();
         $this->requirePermission('commercial_invoices.update');
         $invoice = $this->findInvoiceOrRedirect((int) $id);
-        $status = (int) ($invoice['status'] ?? 0);
-        if ($status !== CommercialInvoice::STATUS_DRAFT && $status !== CommercialInvoice::STATUS_REJECTED) {
-            Response::redirect('/commercial-invoices/' . (int) $id, 'Only draft or rejected commercial invoices can be modified.');
-        }
+        
+        $this->verifyCanEdit($invoice, '/commercial-invoices', 'commercial_invoice');
+
         $this->renderForm('Edit Commercial Invoice', $invoice, $this->invoices->meta($invoice['internal_notes'] ?? null), $this->enrichItems($this->invoices->getItems((int) $id)) ?: [[]], '/commercial-invoices/' . (int) $id);
     }
 
@@ -101,10 +100,9 @@ class CommercialInvoiceController extends Controller
             Response::redirect('/commercial-invoices/' . (int) $id . '/edit', 'Invalid security token.');
         }
         $invoice = $this->findInvoiceOrRedirect((int) $id);
-        $status = (int) ($invoice['status'] ?? 0);
-        if ($status !== CommercialInvoice::STATUS_DRAFT && $status !== CommercialInvoice::STATUS_REJECTED) {
-            Response::redirect('/commercial-invoices/' . (int) $id, 'Only draft or rejected commercial invoices can be modified.');
-        }
+        
+        $this->verifyCanEdit($invoice, '/commercial-invoices', 'commercial_invoice');
+
         $data = $this->invoiceDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateInvoice($data);
@@ -112,6 +110,7 @@ class CommercialInvoiceController extends Controller
             Response::redirect('/commercial-invoices/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->invoices->update((int) $id, $data);
+        $this->logLifecycleAudit('Edit', 'commercial_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], (int)$invoice['status'], 'Commercial Invoice updated');
         Response::redirect('/commercial-invoices/' . (int) $id, 'Commercial Invoice updated successfully.');
     }
 
@@ -122,14 +121,24 @@ class CommercialInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
         $statusId = (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT);
-        $this->invoices->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$invoice['status'], $statusId, '/commercial-invoices');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->invoices->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
         
         if ($statusId === 2) { // 2 = Approved
             $this->autoGenerateExportDocuments((int) $id, (int) $this->currentUserId());
         }
         
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'commercial_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], $statusId, $remarks);
+
         Response::redirect('/commercial-invoices/' . (int) $id, 'Commercial Invoice status updated.');
     }
 
@@ -213,14 +222,29 @@ class CommercialInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
-        $this->invoices->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'CI revision saved')), $this->currentUserId());
-        Response::redirect('/commercial-invoices/' . (int) $id, 'Commercial Invoice revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/commercial-invoices', 'commercial_invoice', $this->invoices);
+        Response::redirect('/commercial-invoices/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('commercial_invoices.view');
+
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $items = $this->enrichItems($this->invoices->getItems((int) $id));
+        $meta = $this->invoices->meta($invoice['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'commercial_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], (int)$invoice['status'], 'Document printed');
+
+        $this->renderPrint('commercial_invoices/print', [
+            'title' => 'Commercial Invoice ' . $invoice['document_number'],
+            'invoice' => $invoice,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\CommercialInvoice::statuses(),
+            'revisions' => $this->invoices->revisions((int) $id),
+        ]);
     }
 
     public function email(string $id): void
@@ -275,7 +299,32 @@ class CommercialInvoiceController extends Controller
 
     private function invoiceDataFromRequest(): array
     {
-        return $this->extractDocumentDataFromRequest(CommercialInvoice::STATUS_DRAFT);
+        $data = $this->extractDocumentDataFromRequest(CommercialInvoice::STATUS_DRAFT);
+        $meta = [
+            'buyer_po' => trim((string)($_POST['buyer_po'] ?? '')),
+            'consignee' => trim((string)($_POST['consignee'] ?? '')),
+            'notify_party' => trim((string)($_POST['notify_party'] ?? '')),
+            'company_bank_id' => (int)($_POST['company_bank_id'] ?? 0),
+            'beneficiary_name' => trim((string)($_POST['beneficiary_name'] ?? '')),
+            'bank_name' => trim((string)($_POST['bank_name'] ?? '')),
+            'account_number' => trim((string)($_POST['account_number'] ?? '')),
+            'swift_code' => trim((string)($_POST['swift_code'] ?? '')),
+            'iban' => trim((string)($_POST['iban'] ?? '')),
+            'container_type' => trim((string)($_POST['container_type'] ?? '20FT')),
+            'freight' => (float)($_POST['freight'] ?? 0.0),
+            'insurance' => (float)($_POST['insurance'] ?? 0.0),
+            'exporter_gst' => trim((string)($_POST['exporter_gst'] ?? '')),
+            'lut_number' => trim((string)($_POST['lut_number'] ?? '')),
+            'iec' => trim((string)($_POST['iec'] ?? '')),
+            'pan' => trim((string)($_POST['pan'] ?? '')),
+            'ad_code' => trim((string)($_POST['ad_code'] ?? '')),
+            'shipping_bill_number' => trim((string)($_POST['shipping_bill_number'] ?? '')),
+            'shipping_bill_date' => trim((string)($_POST['shipping_bill_date'] ?? '')),
+            'export_declaration' => trim((string)($_POST['export_declaration'] ?? '')),
+            'tax_declaration' => trim((string)($_POST['tax_declaration'] ?? '')),
+        ];
+        $data['internal_notes'] = json_encode($meta);
+        return $data;
     }
 
     private function validateInvoice(array $data): array
@@ -304,17 +353,10 @@ class CommercialInvoiceController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/commercial-invoices/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/commercial-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/commercial-invoices', 'Commercial Invoice deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/commercial-invoices', 'commercial_invoices');
     }
 
     private function formatValidationErrors(array $errors): string

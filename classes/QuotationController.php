@@ -94,10 +94,7 @@ class QuotationController extends Controller
         $this->requirePermission('quotations.update');
 
         $quotation = $this->findQuotationOrRedirect((int) $id);
-        $status = (int) ($quotation['status'] ?? 0);
-        if ($status !== Quotation::STATUS_DRAFT && $status !== Quotation::STATUS_REJECTED) {
-            Response::redirect('/quotations/' . (int) $id, 'Only draft or rejected quotations can be modified.');
-        }
+        $this->verifyCanEdit($quotation, '/quotations', 'quotation');
 
         $items = $this->enrichItems($this->quotations->getItems((int) $id));
         $meta = $this->quotations->meta($quotation['internal_notes'] ?? null);
@@ -115,10 +112,7 @@ class QuotationController extends Controller
         }
 
         $quotation = $this->findQuotationOrRedirect((int) $id);
-        $status = (int) ($quotation['status'] ?? 0);
-        if ($status !== Quotation::STATUS_DRAFT && $status !== Quotation::STATUS_REJECTED) {
-            Response::redirect('/quotations/' . (int) $id, 'Only draft or rejected quotations can be modified.');
-        }
+        $this->verifyCanEdit($quotation, '/quotations', 'quotation');
 
         $data = $this->quotationDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
@@ -128,7 +122,7 @@ class QuotationController extends Controller
         }
 
         $this->quotations->update((int) $id, $data);
-        $this->logger->info('Quotation updated', ['quotation_id' => (int) $id]);
+        $this->logLifecycleAudit('Edit', 'quotation', (int)$id, $quotation['document_number'], (int)$quotation['status'], (int)$quotation['status'], 'Quotation updated');
         Response::redirect('/quotations/' . (int) $id, 'Quotation updated successfully.');
     }
 
@@ -141,8 +135,20 @@ class QuotationController extends Controller
             Response::redirect('/quotations/' . (int) $id, 'Invalid security token.');
         }
 
-        $this->findQuotationOrRedirect((int) $id);
-        $this->quotations->updateStatus((int) $id, (int) ($_POST['status'] ?? Quotation::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $quotation = $this->findQuotationOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? Quotation::STATUS_DRAFT);
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$quotation['status'], $statusId, '/quotations');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->quotations->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+        
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'quotation', (int)$id, $quotation['document_number'], (int)$quotation['status'], $statusId, $remarks);
+
         Response::redirect('/quotations/' . (int) $id, 'Quotation status updated.');
     }
 
@@ -155,14 +161,21 @@ class QuotationController extends Controller
             Response::redirect('/quotations/' . (int) $id, 'Invalid security token.');
         }
 
-        $this->findQuotationOrRedirect((int) $id);
-        $this->quotations->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'Revision saved')), $this->currentUserId());
-        Response::redirect('/quotations/' . (int) $id, 'Quotation revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/quotations', 'quotation', $this->quotations);
+        Response::redirect('/quotations/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('quotations.view');
+
+        $quotation = $this->findQuotationOrRedirect((int) $id);
+        $items = $this->enrichItems($this->quotations->getItems((int) $id));
+
+        $this->logLifecycleAudit('Print', 'quotation', (int)$id, $quotation['document_number'], (int)$quotation['status'], (int)$quotation['status'], 'Document printed');
+
+        $this->handleDocumentPrint((int)$id, 'quotation', $quotation, $items);
     }
 
     public function email(string $id): void
@@ -264,17 +277,10 @@ class QuotationController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/quotations/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/quotations/' . (int) $id, 'Invalid security token.');
         }
-        $this->findQuotationOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/quotations', 'Quotation deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/quotations', 'quotations');
     }
 
     /**

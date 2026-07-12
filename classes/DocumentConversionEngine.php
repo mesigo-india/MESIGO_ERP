@@ -70,6 +70,7 @@ class DocumentConversionEngine
                 'remarks' => $source['remarks'],
                 'internal_notes' => $source['internal_notes'],
                 'created_by' => $convertedBy,
+                'converted_from_id' => $sourceId,
             ];
 
             // Apply overrides
@@ -80,10 +81,75 @@ class DocumentConversionEngine
             $newId = $this->documentHeader->create($newData);
 
             // Copy items
+            require_once APP_ROOT . '/classes/Product.php';
+            $productModel = new Product($this->db);
             $sourceItems = $this->documentItem->getByDocument($sourceId);
             foreach ($sourceItems as $index => $item) {
                 $item['document_header_id'] = $newId;
                 $item['sort_order'] = $index;
+
+                if ($targetType === 'packing_list') {
+                    $prod = $productModel->findById((int) $item['product_id']);
+                    if ($prod) {
+                        $unitsPerPkg = (float) ($prod['units_per_package'] ?? 1.0);
+                        if ($unitsPerPkg <= 0.0) {
+                            $unitsPerPkg = 1.0;
+                        }
+
+                        $sourceQty = (float) $item['quantity'];
+
+                        $unitStmt = $this->db->prepare("SELECT code FROM units WHERE id = :id LIMIT 1");
+                        $unitStmt->execute(['id' => (int) $item['unit_id']]);
+                        $unitCode = strtoupper((string) ($unitStmt->fetchColumn() ?: ''));
+                        
+                        $isMt = in_array($unitCode, ['MT', 'TONS', 'TON'], true);
+                        if ($isMt) {
+                            $sourceQty = $sourceQty * 1000.0;
+                            $kgUnitStmt = $this->db->prepare("SELECT id FROM units WHERE UPPER(code) = 'KG' LIMIT 1");
+                            $kgUnitStmt->execute();
+                            $kgUnitId = $kgUnitStmt->fetchColumn();
+                            if ($kgUnitId !== false) {
+                                $item['unit_id'] = (int) $kgUnitId;
+                            }
+                        }
+
+                        $packages = ceil($sourceQty / $unitsPerPkg);
+                        
+                        $netWtPkg = (float) ($prod['net_weight'] ?? 0.0);
+                        $netWeight = $packages * $netWtPkg;
+                        if ($netWeight <= 0.0) {
+                            $netWeight = $sourceQty;
+                        }
+
+                        $emptyPkgWt = (float) ($prod['empty_package_weight'] ?? 0.0);
+                        $grossWeight = $netWeight + ($packages * $emptyPkgWt);
+                        
+                        $cbmPkg = (float) ($prod['volume_per_package_cbm'] ?? 0.0);
+                        $cbm = $packages * $cbmPkg;
+
+                        $dims = '';
+                        if (!empty($prod['package_length'])) {
+                            $dims = $prod['package_length'] . 'x' . $prod['package_width'] . 'x' . $prod['package_height'] . ' cm';
+                        }
+
+                        $item['quantity'] = $packages; 
+                        $item['net_weight'] = $netWeight;
+                        $item['gross_weight'] = $grossWeight;
+                        
+                        $item['quality'] = json_encode([
+                            'dimensions' => $dims,
+                            'remarks' => '',
+                            'units_per_package' => $unitsPerPkg,
+                            'cbm' => $cbm,
+                            'empty_package_weight' => $emptyPkgWt,
+                            'total_qty' => $sourceQty,
+                            'pallet_count' => 0.0,
+                            'net_weight_per_package' => $netWtPkg,
+                            'gross_weight_formula' => $prod['gross_weight_formula'] ?? ''
+                        ]);
+                    }
+                }
+
                 $this->documentItem->create($item);
             }
 

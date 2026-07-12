@@ -90,10 +90,9 @@ class PackingListController extends Controller
         $this->requireLogin();
         $this->requirePermission('packing_lists.update');
         $packingList = $this->findPackingListOrRedirect((int) $id);
-        $status = (int) ($packingList['status'] ?? 0);
-        if ($status !== PackingList::STATUS_DRAFT && $status !== PackingList::STATUS_REJECTED) {
-            Response::redirect('/packing-lists/' . (int) $id, 'Only draft or rejected packing lists can be modified.');
-        }
+        
+        $this->verifyCanEdit($packingList, '/packing-lists', 'packing_list');
+
         $this->renderForm('Edit Packing List', $packingList, $this->packingLists->meta($packingList['internal_notes'] ?? null), $this->enrichItems($this->packingLists->getItems((int) $id)) ?: [[]], '/packing-lists/' . (int) $id);
     }
 
@@ -105,10 +104,9 @@ class PackingListController extends Controller
             Response::redirect('/packing-lists/' . (int) $id . '/edit', 'Invalid security token.');
         }
         $packingList = $this->findPackingListOrRedirect((int) $id);
-        $status = (int) ($packingList['status'] ?? 0);
-        if ($status !== PackingList::STATUS_DRAFT && $status !== PackingList::STATUS_REJECTED) {
-            Response::redirect('/packing-lists/' . (int) $id, 'Only draft or rejected packing lists can be modified.');
-        }
+        
+        $this->verifyCanEdit($packingList, '/packing-lists', 'packing_list');
+
         $data = $this->packingListDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validatePackingList($data);
@@ -120,6 +118,7 @@ class PackingListController extends Controller
         require_once APP_ROOT . '/classes/ContainerLoadingEngine.php';
         $containerEngine = new ContainerLoadingEngine(Database::getInstance(), new UnitConversionEngine(Database::getInstance()));
         $containerEngine->estimateContainers((int) $id);
+        $this->logLifecycleAudit('Edit', 'packing_list', (int)$id, $packingList['document_number'], (int)$packingList['status'], (int)$packingList['status'], 'Packing List updated');
         Response::redirect('/packing-lists/' . (int) $id, 'Packing List updated successfully.');
     }
 
@@ -130,8 +129,20 @@ class PackingListController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/packing-lists/' . (int) $id, 'Invalid security token.');
         }
-        $this->findPackingListOrRedirect((int) $id);
-        $this->packingLists->updateStatus((int) $id, (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $packingList = $this->findPackingListOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT);
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$packingList['status'], $statusId, '/packing-lists');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->packingLists->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'packing_list', (int)$id, $packingList['document_number'], (int)$packingList['status'], $statusId, $remarks);
+
         Response::redirect('/packing-lists/' . (int) $id, 'Packing List status updated.');
     }
 
@@ -142,14 +153,29 @@ class PackingListController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/packing-lists/' . (int) $id, 'Invalid security token.');
         }
-        $this->findPackingListOrRedirect((int) $id);
-        $this->packingLists->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'Packing List revision saved')), $this->currentUserId());
-        Response::redirect('/packing-lists/' . (int) $id, 'Packing List revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/packing-lists', 'packing_list', $this->packingLists);
+        Response::redirect('/packing-lists/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('packing_lists.view');
+
+        $packingList = $this->findPackingListOrRedirect((int) $id);
+        $items = $this->enrichItems($this->packingLists->getItems((int) $id));
+        $meta = $this->packingLists->meta($packingList['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'packing_list', (int)$id, $packingList['document_number'], (int)$packingList['status'], (int)$packingList['status'], 'Document printed');
+
+        $this->renderPrint('packing_lists/print', [
+            'title' => 'Packing List ' . $packingList['document_number'],
+            'packingList' => $packingList,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\PackingList::statuses(),
+            'revisions' => $this->packingLists->revisions((int) $id),
+        ]);
     }
 
     public function email(string $id): void
@@ -209,6 +235,7 @@ class PackingListController extends Controller
                 'net_weight' => trim((string) ($_POST['net_weight'] ?? '0')),
                 'total_packages' => trim((string) ($_POST['total_packages'] ?? '0')),
                 'package_type' => trim((string) ($_POST['package_type'] ?? '')),
+                'selected_container_type' => trim((string) ($_POST['selected_container_type'] ?? '20FT')),
             ],
             'charges' => ['freight' => trim((string) ($_POST['freight'] ?? '0')), 'insurance' => trim((string) ($_POST['insurance'] ?? '0')), 'other_charges' => trim((string) ($_POST['other_charges'] ?? '0'))],
             'items' => $this->itemsFromRequest(),
@@ -229,6 +256,13 @@ class PackingListController extends Controller
                 'gross_weight' => trim((string) ($_POST['gross_weight_item'][$index] ?? '0')),
                 'dimensions' => trim((string) ($_POST['dimensions'][$index] ?? '')),
                 'remarks' => trim((string) ($_POST['item_remarks'][$index] ?? '')),
+                'units_per_package' => (float) ($_POST['units_per_package'][$index] ?? 1.0),
+                'cbm' => (float) ($_POST['cbm'][$index] ?? 0.0),
+                'empty_package_weight' => (float) ($_POST['empty_package_weight'][$index] ?? 0.0),
+                'total_qty' => (float) ($_POST['total_qty'][$index] ?? 0.0),
+                'pallet_count' => (float) ($_POST['pallet_count'][$index] ?? 0.0),
+                'net_weight_per_package' => (float) ($_POST['net_weight_per_package'][$index] ?? 0.0),
+                'gross_weight_formula' => trim((string) ($_POST['gross_weight_formula'][$index] ?? ''))
             ];
         }
         return $items;
@@ -246,6 +280,13 @@ class PackingListController extends Controller
             $item['dimensions'] = (string) ($quality['dimensions'] ?? '');
             $item['item_remarks'] = (string) ($quality['remarks'] ?? '');
             $item['no_of_bags'] = $item['quantity'] ?? 0;
+            $item['units_per_package'] = (float) ($quality['units_per_package'] ?? 1.0);
+            $item['cbm'] = (float) ($quality['cbm'] ?? 0.0);
+            $item['empty_package_weight'] = (float) ($quality['empty_package_weight'] ?? 0.0);
+            $item['total_qty'] = (float) ($quality['total_qty'] ?? 0.0);
+            $item['pallet_count'] = (float) ($quality['pallet_count'] ?? 0.0);
+            $item['net_weight_per_package'] = (float) ($quality['net_weight_per_package'] ?? 0.0);
+            $item['gross_weight_formula'] = (string) ($quality['gross_weight_formula'] ?? '');
         }
         return $items;
     }
@@ -261,17 +302,10 @@ class PackingListController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/packing-lists/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/packing-lists/' . (int) $id, 'Invalid security token.');
         }
-        $this->findPackingListOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/packing-lists', 'Packing List deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/packing-lists', 'packing_lists');
     }
 
     private function formatValidationErrors(array $errors): string

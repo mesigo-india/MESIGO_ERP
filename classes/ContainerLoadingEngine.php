@@ -44,10 +44,13 @@ class ContainerLoadingEngine
      */
     public function estimateContainers(int $documentId): array
     {
-        // 1. Fetch document items
+        // 1. Fetch document items with document type info
         $stmt = $this->db->prepare("
-            SELECT di.*, p.net_weight, p.gross_weight, p.volume_per_package_cbm, u.code as unit_code, di.unit_id
+            SELECT di.*, p.net_weight, p.gross_weight, p.volume_per_package_cbm, u.code as unit_code, di.unit_id,
+                   dt.code as document_type_code
             FROM document_items di
+            JOIN document_headers dh ON di.document_header_id = dh.id
+            JOIN document_types dt ON dh.document_type_id = dt.id
             JOIN products p ON di.product_id = p.id
             LEFT JOIN units u ON di.unit_id = u.id
             WHERE di.document_header_id = :id
@@ -68,32 +71,40 @@ class ContainerLoadingEngine
             $productId = (int) $item['product_id'];
             $unitId = (int) $item['unit_id'];
             $unitCode = strtoupper((string) ($item['unit_code'] ?? ''));
+            $docType = $item['document_type_code'] ?? '';
 
-            $itemNetWeightPerPkg = (float) ($item['net_weight'] ?? 0.0);
-            $itemGrossWeightPerPkg = (float) ($item['gross_weight'] ?? 0.0);
-            $itemVolumePerPkg = (float) ($item['volume_per_package_cbm'] ?? 0.0);
+            $quality = json_decode((string) ($item['quality'] ?? ''), true);
 
-            // A. Standardize to packaging count (Bags/Boxes) if quantity is entered in KG or MT
-            $packagesCount = 0.0;
-            if ($this->isWeightUnit($unitCode)) {
-                if ($bagUnitId !== null) {
-                    $packagesCount = $this->unitEngine->convert($qty, $unitId, $bagUnitId, $productId);
-                } else {
-                    $packagesCount = $itemNetWeightPerPkg > 0.0 ? ($qty / $itemNetWeightPerPkg) : $qty;
+            if ($docType === 'packing_list') {
+                $packagesCount = $qty;
+                $itemNet = (float) ($item['net_weight'] ?? 0.0);
+                $itemGross = (float) ($item['gross_weight'] ?? 0.0);
+                $cbmPerPkg = (float) ($quality['net_weight_per_package'] ?? $item['volume_per_package_cbm'] ?? 0.0); // fallback or direct
+                $itemVol = (float) ($quality['cbm'] ?? ($packagesCount * (float)($quality['cbm_per_package'] ?? $item['volume_per_package_cbm'] ?? 0.0)));
+                if ($itemVol <= 0.0) {
+                    $itemVol = $packagesCount * 0.06;
                 }
             } else {
-                $packagesCount = $qty; // Already entered in bags/boxes
+                $itemNetWeightPerPkg = (float) ($item['net_weight'] ?? 0.0);
+                $itemGrossWeightPerPkg = (float) ($item['gross_weight'] ?? 0.0);
+                $itemVolumePerPkg = (float) ($item['volume_per_package_cbm'] ?? 0.0);
+
+                $packagesCount = 0.0;
+                if ($this->isWeightUnit($unitCode)) {
+                    if ($bagUnitId !== null) {
+                        $packagesCount = $this->unitEngine->convert($qty, $unitId, $bagUnitId, $productId);
+                    } else {
+                        $packagesCount = $itemNetWeightPerPkg > 0.0 ? ($qty / $itemNetWeightPerPkg) : $qty;
+                    }
+                } else {
+                    $packagesCount = $qty;
+                }
+
+                $itemNet = $this->unitEngine->convert($qty, $unitId, $kgUnitId ?: $unitId, $productId);
+                $grossMultiplier = $itemNetWeightPerPkg > 0.0 ? ($itemGrossWeightPerPkg / $itemNetWeightPerPkg) : 1.05;
+                $itemGross = $itemGrossWeightPerPkg > 0.0 ? ($packagesCount * $itemGrossWeightPerPkg) : ($itemNet * $grossMultiplier);
+                $itemVol = $itemVolumePerPkg > 0.0 ? ($packagesCount * $itemVolumePerPkg) : ($packagesCount * 0.06);
             }
-
-            // B. Calculate weights and volume
-            $itemNet = $this->unitEngine->convert($qty, $unitId, $kgUnitId ?: $unitId, $productId);
-            
-            // Gross weight fallback
-            $grossMultiplier = $itemNetWeightPerPkg > 0.0 ? ($itemGrossWeightPerPkg / $itemNetWeightPerPkg) : 1.05;
-            $itemGross = $itemGrossWeightPerPkg > 0.0 ? ($packagesCount * $itemGrossWeightPerPkg) : ($itemNet * $grossMultiplier);
-
-            // Volume fallback (assumes 0.06 CBM per 25-50kg package if missing)
-            $itemVol = $itemVolumePerPkg > 0.0 ? ($packagesCount * $itemVolumePerPkg) : ($packagesCount * 0.06);
 
             $totalNetWeight += $itemNet;
             $totalGrossWeight += $itemGross;
@@ -101,10 +112,17 @@ class ContainerLoadingEngine
             $totalPackages += $packagesCount;
         }
 
-        // 2. Determine container recommendation mix
-        $recommendation = $this->runRecommendationAlgorithm($totalGrossWeight, $totalVolumeCbm);
+        // 2. Fetch container type preference
+        $headerStmt = $this->db->prepare("SELECT internal_notes FROM document_headers WHERE id = :id");
+        $headerStmt->execute(['id' => $documentId]);
+        $headerNotes = $headerStmt->fetchColumn();
+        $headerMeta = json_decode((string) $headerNotes, true) ?: [];
+        $selectedContainer = $headerMeta['selected_container_type'] ?? '20FT';
 
-        // 3. Construct response output
+        // 3. Determine container recommendation mix
+        $recommendation = $this->runRecommendationAlgorithm($totalGrossWeight, $totalVolumeCbm, $selectedContainer);
+
+        // 4. Construct response output
         $summary = [
             'total_packages' => $totalPackages,
             'total_net_weight_kg' => $totalNetWeight,
@@ -130,68 +148,35 @@ class ContainerLoadingEngine
     /**
      * Sizing logic matching weight/volume to container specifications
      */
-    private function runRecommendationAlgorithm(float $weight, float $volume): array
+    private function runRecommendationAlgorithm(float $weight, float $volume, string $selectedContainer = '20FT'): array
     {
         if ($weight === 0.0 || $volume === 0.0) {
             return [];
         }
 
-        $spec20 = self::CONTAINER_SPECS['20FT_DRY'];
-        $spec40 = self::CONTAINER_SPECS['40FT_DRY'];
-        $spec40hc = self::CONTAINER_SPECS['40FT_HC'];
-
-        // Check if fits in one 20ft container
-        if ($weight <= $spec20['max_weight_kg'] && $volume <= $spec20['max_volume_cbm']) {
-            return [
-                'type' => '20FT_DRY',
-                'count' => 1,
-                'name' => $spec20['name'],
-                'utilization' => [
-                    'weight_percent' => ($weight / $spec20['max_weight_kg']) * 100.0,
-                    'volume_percent' => ($volume / $spec20['max_volume_cbm']) * 100.0
-                ]
-            ];
+        $containerTypeKey = '20FT_DRY';
+        if ($selectedContainer === '40FT') {
+            $containerTypeKey = '40FT_DRY';
+        } elseif ($selectedContainer === '40HC') {
+            $containerTypeKey = '40FT_HC';
         }
 
-        // Check if fits in one 40ft container
-        if ($weight <= $spec40['max_weight_kg'] && $volume <= $spec40['max_volume_cbm']) {
-            return [
-                'type' => '40FT_DRY',
-                'count' => 1,
-                'name' => $spec40['name'],
-                'utilization' => [
-                    'weight_percent' => ($weight / $spec40['max_weight_kg']) * 100.0,
-                    'volume_percent' => ($volume / $spec40['max_volume_cbm']) * 100.0
-                ]
-            ];
-        }
+        $spec = self::CONTAINER_SPECS[$containerTypeKey];
 
-        // Check if fits in one 40ft High Cube
-        if ($weight <= $spec40hc['max_weight_kg'] && $volume <= $spec40hc['max_volume_cbm']) {
-            return [
-                'type' => '40FT_HC',
-                'count' => 1,
-                'name' => $spec40hc['name'],
-                'utilization' => [
-                    'weight_percent' => ($weight / $spec40hc['max_weight_kg']) * 100.0,
-                    'volume_percent' => ($volume / $spec40hc['max_volume_cbm']) * 100.0
-                ]
-            ];
+        $countByWeight = ceil($weight / $spec['max_weight_kg']);
+        $countByVolume = ceil($volume / $spec['max_volume_cbm']);
+        $containerCount = max($countByWeight, $countByVolume);
+        if ($containerCount <= 0) {
+            $containerCount = 1;
         }
-
-        // Multi-container calculations (e.g. split into multiples of 20ft or 40ft)
-        // Default to a count of 40ft HC containers based on the max volume restriction
-        $countByVolume = ceil($volume / $spec40hc['max_volume_cbm']);
-        $countByWeight = ceil($weight / $spec40hc['max_weight_kg']);
-        $hcCount = max($countByVolume, $countByWeight);
 
         return [
-            'type' => '40FT_HC',
-            'count' => (int) $hcCount,
-            'name' => $spec40hc['name'],
+            'type' => $containerTypeKey,
+            'count' => (int) $containerCount,
+            'name' => $spec['name'],
             'utilization' => [
-                'weight_percent' => ($weight / ($hcCount * $spec40hc['max_weight_kg'])) * 100.0,
-                'volume_percent' => ($volume / ($hcCount * $spec40hc['max_volume_cbm'])) * 100.0
+                'weight_percent' => ($weight / ($containerCount * $spec['max_weight_kg'])) * 100.0,
+                'volume_percent' => ($volume / ($containerCount * $spec['max_volume_cbm'])) * 100.0
             ]
         ];
     }

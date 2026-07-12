@@ -75,6 +75,9 @@ class CertificateOfOriginController extends Controller
         $this->requireLogin();
         $this->requirePermission('certificate_of_origins.update');
         $certificate = $this->findCertificateOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($certificate, '/certificate-of-origins', 'certificate_of_origin');
+
         $this->renderForm('Edit Certificate of Origin', $certificate, $this->certificates->meta($certificate['internal_notes'] ?? null), $this->certificates->getItems((int) $id) ?: [[]], '/certificate-of-origins/' . (int) $id);
     }
 
@@ -85,7 +88,10 @@ class CertificateOfOriginController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/certificate-of-origins/' . (int) $id . '/edit', 'Invalid security token.');
         }
-        $this->findCertificateOrRedirect((int) $id);
+        $certificate = $this->findCertificateOrRedirect((int) $id);
+        
+        $this->verifyCanEdit($certificate, '/certificate-of-origins', 'certificate_of_origin');
+
         $data = $this->certificateDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateCertificate($data);
@@ -93,6 +99,7 @@ class CertificateOfOriginController extends Controller
             Response::redirect('/certificate-of-origins/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->certificates->update((int) $id, $data);
+        $this->logLifecycleAudit('Edit', 'certificate_of_origin', (int)$id, $certificate['document_number'], (int)$certificate['status'], (int)$certificate['status'], 'Certificate of Origin updated');
         Response::redirect('/certificate-of-origins/' . (int) $id, 'Certificate of Origin updated successfully.');
     }
 
@@ -103,8 +110,20 @@ class CertificateOfOriginController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/certificate-of-origins/' . (int) $id, 'Invalid security token.');
         }
-        $this->findCertificateOrRedirect((int) $id);
-        $this->certificates->updateStatus((int) $id, (int) ($_POST['status'] ?? CertificateOfOrigin::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $certificate = $this->findCertificateOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? CertificateOfOrigin::STATUS_DRAFT);
+        
+        $this->verifyCanChangeStatus((int)$id, (int)$certificate['status'], $statusId, '/certificate-of-origins');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->certificates->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'certificate_of_origin', (int)$id, $certificate['document_number'], (int)$certificate['status'], $statusId, $remarks);
+
         Response::redirect('/certificate-of-origins/' . (int) $id, 'Certificate of Origin status updated.');
     }
 
@@ -115,14 +134,29 @@ class CertificateOfOriginController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/certificate-of-origins/' . (int) $id, 'Invalid security token.');
         }
-        $this->findCertificateOrRedirect((int) $id);
-        $this->certificates->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'Certificate of Origin revision saved')), $this->currentUserId());
-        Response::redirect('/certificate-of-origins/' . (int) $id, 'Certificate of Origin revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/certificate-of-origins', 'certificate_of_origin', $this->certificates);
+        Response::redirect('/certificate-of-origins/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('certificate_of_origins.view');
+
+        $certificate = $this->findCertificateOrRedirect((int) $id);
+        $items = $this->certificates->getItems((int) $id);
+        $meta = $this->certificates->meta($certificate['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'certificate_of_origin', (int)$id, $certificate['document_number'], (int)$certificate['status'], (int)$certificate['status'], 'Document printed');
+
+        $this->renderPrint('certificate_of_origins/print', [
+            'title' => 'Certificate of Origin ' . $certificate['document_number'],
+            'certificate' => $certificate,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\CertificateOfOrigin::statuses(),
+            'revisions' => $this->certificates->revisions((int) $id),
+        ]);
     }
 
     private function renderForm(string $title, ?array $certificate, array $meta, array $items, string $action): void
@@ -160,17 +194,10 @@ class CertificateOfOriginController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/certificate-of-origins/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/certificate-of-origins/' . (int) $id, 'Invalid security token.');
         }
-        $this->findCertificateOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/certificate-of-origins', 'Certificate of Origin deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/certificate-of-origins', 'certificate_of_origins');
     }
 
     private function formatValidationErrors(array $errors): string

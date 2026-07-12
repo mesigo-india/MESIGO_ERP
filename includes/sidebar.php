@@ -151,7 +151,7 @@ $compName = $comp ? $comp : 'MESIGO ERP';
 
             <!-- System Administration -->
             <?php 
-            $isAdminActive = isActive('/company') || isActive('/users') || isActive('/roles') || isActive('/permissions') || (isActive('/settings') && !$isMasterActive);
+            $isAdminActive = isActive('/company') || isActive('/users') || isActive('/roles') || isActive('/permissions') || (isActive('/settings') && !$isMasterActive) || isActive('/administration/print-studio') || isActive('/administration/assets') || isActive('/administration/ai-settings');
             ?>
             <li class="nav-item">
                 <a href="#adminGroup" class="nav-link <?= $isAdminActive ? '' : 'collapsed' ?>" data-bs-toggle="collapse">
@@ -162,6 +162,9 @@ $compName = $comp ? $comp : 'MESIGO ERP';
                 <div class="collapse <?= $isAdminActive ? 'show' : '' ?>" id="adminGroup">
                     <ul class="submenu">
                         <li><a href="/company" class="nav-link <?= isActive('/company') ? 'active' : '' ?>"><i class="fas fa-building small"></i> Company Profile</a></li>
+                        <li><a href="/administration/print-studio" class="nav-link <?= isActive('/administration/print-studio') ? 'active' : '' ?>"><i class="fas fa-print small"></i> Print Studio</a></li>
+                        <li><a href="/administration/assets" class="nav-link <?= isActive('/administration/assets') ? 'active' : '' ?>"><i class="fas fa-images small"></i> Asset Library</a></li>
+                        <li><a href="/administration/ai-settings" class="nav-link <?= isActive('/administration/ai-settings') ? 'active' : '' ?>"><i class="fas fa-robot small"></i> AI Settings</a></li>
                         <li><a href="/users" class="nav-link <?= isActive('/users') ? 'active' : '' ?>"><i class="fas fa-users-cog small"></i> User Accounts</a></li>
                         <li><a href="/roles" class="nav-link <?= isActive('/roles') ? 'active' : '' ?>"><i class="fas fa-shield-alt small"></i> Security Roles</a></li>
                         <li><a href="/permissions" class="nav-link <?= isActive('/permissions') ? 'active' : '' ?>"><i class="fas fa-key small"></i> Permissions matrix</a></li>

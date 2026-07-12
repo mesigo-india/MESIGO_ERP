@@ -138,6 +138,8 @@ $router->post('/shipping-bills/{id}/revise', 'ShippingBillController@revise');
 $router->get('/shipping-bills/{id}/print', 'ShippingBillController@print');
 $router->post('/shipping-bills/{id}/email', 'ShippingBillController@email');
 $router->post('/shipping-bills/{id}/convert', 'ShippingBillController@convert');
+$router->post('/shipping-bills/{id}/convert-co', 'ShippingBillController@convertCo');
+$router->post('/shipping-bills/{id}/convert-phyto', 'ShippingBillController@convertPhyto');
 $router->post('/shipping-bills/{id}/delete', 'ShippingBillController@delete');
 
 // Bill of Lading Routes
@@ -170,6 +172,18 @@ $router->get('/non-hazardous-certs', 'NonHazardousCertController@index');
 $router->get('/non-hazardous-certs/{id}', 'NonHazardousCertController@show');
 $router->post('/non-hazardous-certs/{id}/delete', 'NonHazardousCertController@delete');
 
+// Phytosanitary Certificate Routes
+$router->get('/phytosanitary', 'PhytosanitaryController@index');
+$router->get('/phytosanitary/create', 'PhytosanitaryController@create');
+$router->post('/phytosanitary', 'PhytosanitaryController@store');
+$router->get('/phytosanitary/{id}', 'PhytosanitaryController@show');
+$router->get('/phytosanitary/{id}/edit', 'PhytosanitaryController@edit');
+$router->post('/phytosanitary/{id}', 'PhytosanitaryController@update');
+$router->post('/phytosanitary/{id}/status', 'PhytosanitaryController@status');
+$router->post('/phytosanitary/{id}/revise', 'PhytosanitaryController@revise');
+$router->get('/phytosanitary/{id}/print', 'PhytosanitaryController@print');
+$router->post('/phytosanitary/{id}/delete', 'PhytosanitaryController@delete');
+
 // Export Documentation Center Routes
 $router->get('/export-documents', 'ExportDocumentController@index');
 $router->get('/export-documents/{id}', 'ExportDocumentController@show');
@@ -199,6 +213,13 @@ $router->post('/settings/master-data/{key}/quick-store', 'ProductMasterDataContr
 $router->get('/settings/master-data/{key}/{id}/edit', 'ProductMasterDataController@edit');
 $router->post('/settings/master-data/{key}/{id}', 'ProductMasterDataController@update');
 $router->post('/settings/master-data/{key}/{id}/delete', 'ProductMasterDataController@delete');
+
+// Advanced AI Layer & Import/Export Routes
+$router->get('/administration/ai-settings', 'ProductMasterDataController@aiSettingsIndex');
+$router->post('/administration/ai-settings', 'ProductMasterDataController@aiSettingsUpdate');
+$router->get('/api/v1/ai/suggest', 'ProductMasterDataController@suggestAi');
+$router->post('/settings/master-data/{key}/import', 'ProductMasterDataController@import');
+$router->get('/settings/master-data/{key}/export', 'ProductMasterDataController@export');
 $router->get('/settings/product-categories', 'ProductMasterDataController@categoriesIndex');
 $router->get('/settings/product-categories/create', 'ProductMasterDataController@categoriesCreate');
 $router->post('/settings/product-categories', 'ProductMasterDataController@categoriesStore');
@@ -238,6 +259,18 @@ $router->post('/settings/packing-types/{id}/delete', 'ProductMasterDataControlle
 
 $router->get('/settings', 'SettingsController@index');
 $router->post('/settings', 'SettingsController@update');
+
+// Print Studio & Company Asset Manager Routes
+$router->get('/administration/print-studio', 'PrintTemplateController@index');
+$router->get('/administration/print-studio/{id}/edit', 'PrintTemplateController@edit');
+$router->post('/administration/print-studio/{id}', 'PrintTemplateController@update');
+$router->get('/administration/print-studio/{id}/preview', 'PrintTemplateController@preview');
+$router->post('/administration/print-studio/{id}/preview', 'PrintTemplateController@preview');
+
+$router->get('/administration/assets', 'PrintAssetController@index');
+$router->post('/administration/assets', 'PrintAssetController@store');
+$router->post('/administration/assets/{id}', 'PrintAssetController@update');
+$router->post('/administration/assets/{id}/delete', 'PrintAssetController@delete');
 
 // API Routes
 $router->get('/api/v1/users', 'Api\UserController@index');

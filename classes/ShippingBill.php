@@ -24,6 +24,16 @@ class ShippingBill extends PackingList
         return $this->convertTo($id, 'bill_of_lading', $userId, ['status' => BillOfLading::STATUS_DRAFT]);
     }
 
+    public function convertToCertificateOfOrigin(int $id, int $userId): int
+    {
+        return $this->convertTo($id, 'certificate_of_origin', $userId, ['status' => CertificateOfOrigin::STATUS_DRAFT]);
+    }
+
+    public function convertToPhytosanitary(int $id, int $userId): int
+    {
+        return $this->convertTo($id, 'phytosanitary', $userId, ['status' => Phytosanitary::STATUS_DRAFT]);
+    }
+
     public static function statuses(): array
     {
         return [

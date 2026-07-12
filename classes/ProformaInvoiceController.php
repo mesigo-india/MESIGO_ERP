@@ -84,10 +84,9 @@ class ProformaInvoiceController extends Controller
         $this->requireLogin();
         $this->requirePermission('proforma_invoices.update');
         $invoice = $this->findInvoiceOrRedirect((int) $id);
-        $status = (int) ($invoice['status'] ?? 0);
-        if ($status !== ProformaInvoice::STATUS_DRAFT && $status !== ProformaInvoice::STATUS_REJECTED) {
-            Response::redirect('/proforma-invoices/' . (int) $id, 'Only draft or rejected proforma invoices can be modified.');
-        }
+        
+        $this->verifyCanEdit($invoice, '/proforma-invoices', 'proforma_invoice');
+
         $this->renderForm(
             'Edit Proforma Invoice',
             $invoice,
@@ -105,10 +104,9 @@ class ProformaInvoiceController extends Controller
             Response::redirect('/proforma-invoices/' . (int) $id . '/edit', 'Invalid security token.');
         }
         $invoice = $this->findInvoiceOrRedirect((int) $id);
-        $status = (int) ($invoice['status'] ?? 0);
-        if ($status !== ProformaInvoice::STATUS_DRAFT && $status !== ProformaInvoice::STATUS_REJECTED) {
-            Response::redirect('/proforma-invoices/' . (int) $id, 'Only draft or rejected proforma invoices can be modified.');
-        }
+        
+        $this->verifyCanEdit($invoice, '/proforma-invoices', 'proforma_invoice');
+
         $data = $this->invoiceDataFromRequest();
         $data['updated_by'] = $this->currentUserId();
         $errors = $this->validateInvoice($data);
@@ -116,6 +114,7 @@ class ProformaInvoiceController extends Controller
             Response::redirect('/proforma-invoices/' . (int) $id . '/edit', $this->formatValidationErrors($errors));
         }
         $this->invoices->update((int) $id, $data);
+        $this->logLifecycleAudit('Edit', 'proforma_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], (int)$invoice['status'], 'Proforma Invoice updated');
         Response::redirect('/proforma-invoices/' . (int) $id, 'Proforma Invoice updated successfully.');
     }
 
@@ -126,8 +125,20 @@ class ProformaInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/proforma-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
-        $this->invoices->updateStatus((int) $id, (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT), (int) $this->currentUserId(), trim((string) ($_POST['remarks'] ?? '')));
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $statusId = (int) ($_POST['status'] ?? ProformaInvoice::STATUS_DRAFT);
+
+        $this->verifyCanChangeStatus((int)$id, (int)$invoice['status'], $statusId, '/proforma-invoices');
+
+        $remarks = trim((string) ($_POST['remarks'] ?? ''));
+        $this->invoices->updateStatus((int) $id, $statusId, (int) $this->currentUserId(), $remarks);
+
+        // Log status change audit
+        $actionName = 'Status Change';
+        if ($statusId === 2) $actionName = 'Approve';
+        if ($statusId === 3) $actionName = 'Reject';
+        $this->logLifecycleAudit($actionName, 'proforma_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], $statusId, $remarks);
+
         Response::redirect('/proforma-invoices/' . (int) $id, 'Proforma Invoice status updated.');
     }
 
@@ -138,14 +149,29 @@ class ProformaInvoiceController extends Controller
         if (!$this->validateCsrf()) {
             Response::redirect('/proforma-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
-        $this->invoices->revise((int) $id, trim((string) ($_POST['revision_notes'] ?? 'PI revision saved')), $this->currentUserId());
-        Response::redirect('/proforma-invoices/' . (int) $id, 'Proforma Invoice revision saved.');
+        $newId = $this->handleDocumentRevision((int)$id, '/proforma-invoices', 'proforma_invoice', $this->invoices);
+        Response::redirect('/proforma-invoices/' . $newId, 'New document revision created successfully.');
     }
 
     public function print(string $id): void
     {
-        $this->show($id);
+        $this->requireLogin();
+        $this->requirePermission('proforma_invoices.view');
+
+        $invoice = $this->findInvoiceOrRedirect((int) $id);
+        $items = $this->enrichItems($this->invoices->getItems((int) $id));
+        $meta = $this->invoices->meta($invoice['internal_notes'] ?? null);
+
+        $this->logLifecycleAudit('Print', 'proforma_invoice', (int)$id, $invoice['document_number'], (int)$invoice['status'], (int)$invoice['status'], 'Document printed');
+
+        $this->renderPrint('proforma_invoices/print', [
+            'title' => 'Proforma Invoice ' . $invoice['document_number'],
+            'invoice' => $invoice,
+            'items' => $items,
+            'meta' => $meta,
+            'statuses' => \App\Core\ProformaInvoice::statuses(),
+            'revisions' => $this->invoices->revisions((int) $id),
+        ]);
     }
 
     public function email(string $id): void
@@ -200,7 +226,25 @@ class ProformaInvoiceController extends Controller
 
     private function invoiceDataFromRequest(): array
     {
-        return $this->extractDocumentDataFromRequest(ProformaInvoice::STATUS_DRAFT);
+        $data = $this->extractDocumentDataFromRequest(ProformaInvoice::STATUS_DRAFT);
+        $meta = [
+            'buyer_po' => trim((string)($_POST['buyer_po'] ?? '')),
+            'consignee' => trim((string)($_POST['consignee'] ?? '')),
+            'notify_party' => trim((string)($_POST['notify_party'] ?? '')),
+            'advance_percent' => (float)($_POST['advance_percent'] ?? 30.0),
+            'balance_percent' => (float)($_POST['balance_percent'] ?? 70.0),
+            'company_bank_id' => (int)($_POST['company_bank_id'] ?? 0),
+            'beneficiary_name' => trim((string)($_POST['beneficiary_name'] ?? '')),
+            'bank_name' => trim((string)($_POST['bank_name'] ?? '')),
+            'account_number' => trim((string)($_POST['account_number'] ?? '')),
+            'swift_code' => trim((string)($_POST['swift_code'] ?? '')),
+            'iban' => trim((string)($_POST['iban'] ?? '')),
+            'container_type' => trim((string)($_POST['container_type'] ?? '20FT')),
+            'freight' => (float)($_POST['freight'] ?? 0.0),
+            'insurance' => (float)($_POST['insurance'] ?? 0.0),
+        ];
+        $data['internal_notes'] = json_encode($meta);
+        return $data;
     }
 
     private function validateInvoice(array $data): array
@@ -229,17 +273,10 @@ class ProformaInvoiceController extends Controller
 
     public function delete(string $id): void
     {
-        $this->requireLogin();
-        if ($this->auth->user()['role_name'] !== 'admin') {
-            Response::redirect('/proforma-invoices/' . (int) $id, 'Only administrators can delete transactions.');
-        }
         if (!$this->validateCsrf()) {
             Response::redirect('/proforma-invoices/' . (int) $id, 'Invalid security token.');
         }
-        $this->findInvoiceOrRedirect((int) $id);
-        $stmt = Database::getInstance()->prepare("UPDATE document_headers SET deleted_at = NOW(), deleted_by = :user_id, status = 0 WHERE id = :id");
-        $stmt->execute(['user_id' => $this->currentUserId(), 'id' => (int) $id]);
-        Response::redirect('/proforma-invoices', 'Proforma Invoice deleted successfully.');
+        $this->handleDocumentDelete((int)$id, '/proforma-invoices', 'proforma_invoices');
     }
 
     private function formatValidationErrors(array $errors): string
