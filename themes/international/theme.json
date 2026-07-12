@@ -1,0 +1,9 @@
+{
+    "name": "International",
+    "code": "international",
+    "fonts": [
+        "Inter",
+        "Helvetica",
+        "Arial"
+    ]
+}

@@ -1,0 +1,9 @@
+{
+    "name": "Minimal",
+    "code": "minimal",
+    "fonts": [
+        "Inter",
+        "Helvetica",
+        "Arial"
+    ]
+}

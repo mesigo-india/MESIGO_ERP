@@ -1,0 +1,9 @@
+{
+    "name": "Modern",
+    "code": "modern",
+    "fonts": [
+        "Inter",
+        "Helvetica",
+        "Arial"
+    ]
+}

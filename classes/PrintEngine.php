@@ -153,6 +153,84 @@ class PrintEngine
         $mBottom = $settings['margin_bottom'] ?? 15;
         $mLeft = $settings['margin_left'] ?? 15;
         $mRight = $settings['margin_right'] ?? 15;
+        $theme = $settings['theme_code'] ?? 'mesigo-professional';
+
+        // Extract metadata custom logo resize values
+        $metadata = json_decode($settings['print_metadata_json'] ?? '{}', true) ?: [];
+        $logoWidth = (int)($metadata['logo_width'] ?? 120);
+
+        // 1. Fetch Company profile if not provided
+        if (empty($documentData['company'])) {
+            $stmt = $this->db->prepare("SELECT * FROM company ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            $documentData['company'] = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+        }
+
+        // Apply metadata overrides
+        if (!empty($metadata['company_name_override'])) {
+            $documentData['company']['company_name'] = $metadata['company_name_override'];
+        }
+        if (!empty($metadata['company_address_override'])) {
+            $documentData['company']['address'] = $metadata['company_address_override'];
+        }
+
+        // 2. Decode and format company JSON address beautifully
+        if (!empty($documentData['company']['address'])) {
+            $addr = $documentData['company']['address'];
+            $decoded = json_decode($addr, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $parts = [];
+                if (!empty($decoded['line1'])) $parts[] = $decoded['line1'];
+                if (!empty($decoded['line2'])) $parts[] = $decoded['line2'];
+                if (!empty($decoded['city'])) $parts[] = $decoded['city'];
+                if (!empty($decoded['state'])) $parts[] = $decoded['state'];
+                if (!empty($decoded['country'])) $parts[] = $decoded['country'];
+                if (!empty($decoded['zip'])) {
+                    $zipStr = $decoded['zip'];
+                    if (count($parts) > 0) {
+                        $parts[count($parts) - 1] .= ' - ' . $zipStr;
+                    } else {
+                        $parts[] = $zipStr;
+                    }
+                }
+                $documentData['company']['address'] = implode(', ', $parts);
+            }
+        }
+
+        // 3. Resolve logo path from asset library if company logo_path is empty
+        if (empty($documentData['company']['logo_path'])) {
+            $logoAsset = $this->db->query("SELECT file_path FROM print_company_assets WHERE asset_type = 'logo' ORDER BY id DESC LIMIT 1")->fetchColumn();
+            if ($logoAsset) {
+                $documentData['company']['logo_path'] = $logoAsset;
+            }
+        }
+
+        // 4. Resolve signatures array from asset library if print_signature is empty
+        if (empty($signatures)) {
+            $sigAssets = $this->db->query("
+                SELECT 'Authorized Signatory' as authorized_person, 'Director' as designation, 100 as scale_percent, 0 as position_x, file_path 
+                FROM print_company_assets 
+                WHERE asset_type = 'signature'
+                ORDER BY id ASC
+            ")->fetchAll(\PDO::FETCH_ASSOC);
+            if (!empty($sigAssets)) {
+                $signatures = $sigAssets;
+            }
+        }
+
+        // 5. Automatic bank details fallback
+        if (empty($documentData['bank'])) {
+            $stmt = $this->db->prepare("SELECT * FROM banks LIMIT 1");
+            $stmt->execute();
+            $documentData['bank'] = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+        }
+
+        // Load custom theme CSS
+        $themeCss = '';
+        $cssPath = APP_ROOT . "/themes/{$theme}/theme.css";
+        if (file_exists($cssPath)) {
+            $themeCss = file_get_contents($cssPath);
+        }
 
         ob_start();
         ?>
@@ -166,16 +244,9 @@ class PrintEngine
                     margin: <?php echo $mTop; ?>mm <?php echo $mRight; ?>mm <?php echo $mBottom; ?>mm <?php echo $mLeft; ?>mm;
                 }
                 body {
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                    font-size: 10pt;
-                    line-height: 1.4;
-                    color: #333;
                     margin: 0;
                     padding: 0;
-                }
-                .container {
-                    width: 100%;
-                    position: relative;
+                    background-color: #ffffff;
                 }
                 
                 /* Layout Grids */
@@ -200,14 +271,21 @@ class PrintEngine
                 .col-11 { width: 91.66%; float: left; }
                 .col-12 { width: 100.00%; float: left; }
 
-                /* Standard styling elements */
                 .text-left { text-align: left; }
                 .text-right { text-align: right; }
                 .text-center { text-align: center; }
                 .text-justify { text-align: justify; }
-                
                 .bold { font-weight: bold; }
                 
+                /* Screen/Iframe preview margin mapping simulation */
+                .preview-page-container {
+                    padding-top: <?php echo $mTop; ?>mm;
+                    padding-bottom: <?php echo $mBottom; ?>mm;
+                    padding-left: <?php echo $mLeft; ?>mm;
+                    padding-right: <?php echo $mRight; ?>mm;
+                    box-sizing: border-box;
+                }
+
                 /* Watermark overlay styling */
                 <?php if ($watermark): ?>
                 .watermark {
@@ -224,31 +302,7 @@ class PrintEngine
                 }
                 <?php endif; ?>
 
-                /* Product Table styling */
-                table.product-grid {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 15px;
-                    margin-bottom: 15px;
-                }
-                table.product-grid th, table.product-grid td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    font-size: 9.5pt;
-                }
-                table.product-grid th {
-                    background-color: #0b1c3d;
-                    color: #ffffff;
-                    font-weight: bold;
-                }
-                
-                /* Letterhead hide elements if configured */
-                <?php if (in_array($settings['letterhead_mode'], ['letterhead', 'logo_only'])): ?>
-                .digital-header {
-                    visibility: hidden;
-                    height: <?php echo $settings['header_height']; ?>mm;
-                }
-                <?php endif; ?>
+                <?php echo $themeCss; ?>
             </style>
         </head>
         <body>
@@ -256,172 +310,40 @@ class PrintEngine
                 <div class="watermark"><?php echo htmlspecialchars($watermark['text_value']); ?></div>
             <?php endif; ?>
 
-            <div class="container">
-                <!-- 1. Header Section -->
-                <?php if (isset($sections['header'])): 
-                    $hSec = $sections['header']; ?>
-                    <div class="row" style="border-bottom: 2px solid #0b1c3d; padding-bottom: 10px;">
-                        <?php foreach ($hSec['fields'] as $field): 
-                            $val = '';
-                            if ($field['field_key'] === 'company_name') $val = $documentData['company']['name'] ?? 'MESIGO EXPORTS';
-                            elseif ($field['field_key'] === 'company_address') $val = $documentData['company']['address'] ?? '';
-                            elseif ($field['field_key'] === 'document_number') $val = $documentData['header']['document_number'] ?? '';
-                            elseif ($field['field_key'] === 'document_date') $val = $documentData['header']['document_date'] ?? '';
-                            ?>
-                            <div class="col-<?php echo $field['col_span']; ?> text-<?php echo $field['alignment']; ?>">
-                                <?php if ($field['field_key'] === 'logo'): ?>
-                                    <!-- Render Logo Placeholder / Real logo base64 if configured -->
-                                    <div style="font-weight: bold; color: #0b1c3d; font-size: 16pt;">LOGO</div>
-                                <?php else: ?>
-                                    <div class="<?php echo $field['style_json'] ? (strpos($field['style_json'], 'bold') !== false ? 'bold' : '') : ''; ?>">
-                                        <?php echo htmlspecialchars($val); ?>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
+            <div class="preview-page-container">
+                <?php
+                // Include dynamic layout blocks sequentially
+                foreach ($sections as $secCode => $sec) {
+                    if (empty($sec['is_visible'])) {
+                        continue;
+                    }
+                    // Map section codes to file base names
+                    $blockName = $secCode;
+                    if ($blockName === 'grid') {
+                        $blockName = 'table';
+                    }
+                    if ($blockName === 'signatures') {
+                        $blockName = 'signature';
+                    }
 
-                <!-- 2. Buyer/Consignee Info Section -->
-                <?php if (isset($sections['buyer'])): 
-                    $bSec = $sections['buyer']; ?>
-                    <div class="row" style="margin-top: 15px;">
-                        <?php foreach ($bSec['fields'] as $field): 
-                            $val = '';
-                            if ($field['field_key'] === 'buyer_name') $val = $documentData['buyer']['company_name'] ?? '';
-                            elseif ($field['field_key'] === 'buyer_address') $val = $documentData['buyer']['address'] ?? '';
-                            elseif ($field['field_key'] === 'consignee') $val = $documentData['header']['consignee_name'] ?? '';
-                            elseif ($field['field_key'] === 'incoterm') $val = $documentData['header']['incoterm_code'] ?? '';
-                            elseif ($field['field_key'] === 'payment_terms') $val = $documentData['header']['payment_terms'] ?? '';
-                            elseif ($field['field_key'] === 'destination_port') $val = $documentData['header']['destination_port_name'] ?? '';
-                            ?>
-                            <div class="col-<?php echo $field['col_span']; ?> text-<?php echo $field['alignment']; ?>" style="margin-bottom: 5px;">
-                                <strong><?php echo htmlspecialchars($field['custom_label'] ?: $field['field_key']); ?>:</strong>
-                                <div><?php echo nl2br(htmlspecialchars((string)$val)); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
+                    $blockFile = APP_ROOT . "/themes/{$theme}/{$blockName}.php";
+                    if (!file_exists($blockFile)) {
+                        $blockFile = APP_ROOT . "/themes/mesigo-professional/{$blockName}.php";
+                    }
 
-                <!-- 3. Product Grid Designer Section -->
-                <?php if (isset($sections['grid'])): 
-                    $gSec = $sections['grid']; ?>
-                    <table class="product-grid">
-                        <thead>
-                            <tr>
-                                <?php foreach ($gSec['fields'] as $field): ?>
-                                    <th class="text-<?php echo $field['alignment']; ?>" style="width: <?php echo ($field['col_span'] / 12) * 100; ?>%;">
-                                        <?php echo htmlspecialchars($field['custom_label'] ?: $field['field_key']); ?>
-                                    </th>
-                                <?php endforeach; ?>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php 
-                            $i = 1;
-                            foreach ($documentData['items'] as $item): ?>
-                                <tr>
-                                    <?php foreach ($gSec['fields'] as $field): 
-                                        $val = '';
-                                        if ($field['field_key'] === 'serial_number') $val = (string)$i;
-                                        elseif ($field['field_key'] === 'product_name') $val = $item['product_name'] ?? '';
-                                        elseif ($field['field_key'] === 'hsn_code') $val = $item['hs_code'] ?? '';
-                                        elseif ($field['field_key'] === 'quantity') $val = number_format((float)($item['quantity'] ?? 0), 2);
-                                        elseif ($field['field_key'] === 'rate') $val = number_format((float)($item['rate'] ?? 0), 2);
-                                        elseif ($field['field_key'] === 'net_amount') $val = number_format((float)($item['amount'] ?? 0), 2);
-                                        ?>
-                                        <td class="text-<?php echo $field['alignment']; ?>">
-                                            <?php echo htmlspecialchars((string)$val); ?>
-                                        </td>
-                                    <?php endforeach; ?>
-                                </tr>
-                            <?php 
-                            $i++;
-                            endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
+                    if (file_exists($blockFile)) {
+                        $company = $documentData['company'] ?? [];
+                        $header = $documentData['header'] ?? [];
+                        $buyer = $documentData['buyer'] ?? [];
+                        $bank = $documentData['bank'] ?? [];
+                        $items = $documentData['items'] ?? [];
+                        $fields = $sec['fields'] ?? [];
+                        $logoWidth = $logoWidth; // expose logoWidth override inside blocks scope
 
-                <!-- 4. Summary & Totals -->
-                <?php if (isset($sections['summary'])): 
-                    $sSec = $sections['summary']; ?>
-                    <div class="row">
-                        <div class="col-6">
-                            <!-- Left space / placeholder -->
-                        </div>
-                        <div class="col-6">
-                            <?php foreach ($sSec['fields'] as $field): 
-                                $val = '';
-                                if ($field['field_key'] === 'subtotal') $val = number_format((float)($documentData['header']['subtotal'] ?? 0), 2);
-                                elseif ($field['field_key'] === 'freight') $val = number_format((float)($documentData['header']['freight'] ?? 0), 2);
-                                elseif ($field['field_key'] === 'grand_total') $val = number_format((float)($documentData['header']['grand_total'] ?? 0), 2);
-                                ?>
-                                <div class="row">
-                                    <div class="col-6 text-right">
-                                        <strong><?php echo htmlspecialchars($field['custom_label'] ?: $field['field_key']); ?>:</strong>
-                                    </div>
-                                    <div class="col-6 text-right <?php echo $field['field_key'] === 'grand_total' ? 'bold' : ''; ?>">
-                                        <?php echo htmlspecialchars((string)$val); ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <!-- 5. Bank Details Section -->
-                <?php if (isset($sections['bank'])): 
-                    $bkSec = $sections['bank']; ?>
-                    <div class="row" style="border-top: 1px solid #ddd; margin-top: 15px; padding-top: 10px;">
-                        <div class="col-12"><strong style="color: #0b1c3d;">BANK DETAILS FOR REMITTANCE</strong></div>
-                        <?php foreach ($bkSec['fields'] as $field): 
-                            $val = '';
-                            if ($field['field_key'] === 'bank_name') $val = $documentData['bank']['bank_name'] ?? '';
-                            elseif ($field['field_key'] === 'branch') $val = $documentData['bank']['branch'] ?? '';
-                            elseif ($field['field_key'] === 'iban') $val = $documentData['bank']['iban'] ?? '';
-                            elseif ($field['field_key'] === 'swift_code') $val = $documentData['bank']['swift_code'] ?? '';
-                            ?>
-                            <div class="col-<?php echo $field['col_span']; ?> text-<?php echo $field['alignment']; ?>">
-                                <strong><?php echo htmlspecialchars($field['custom_label'] ?: $field['field_key']); ?>:</strong>
-                                <span><?php echo htmlspecialchars((string)$val); ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <!-- 6. Terms and Conditions -->
-                <?php if (isset($sections['terms'])): 
-                    $tSec = $sections['terms']; ?>
-                    <div class="row" style="margin-top: 15px;">
-                        <?php foreach ($tSec['fields'] as $field): 
-                            $val = $documentData['header']['terms'] ?? '1. Standard export rules apply.';
-                            ?>
-                            <div class="col-<?php echo $field['col_span']; ?> text-<?php echo $field['alignment']; ?>">
-                                <strong><?php echo htmlspecialchars($field['custom_label'] ?: $field['field_key']); ?>:</strong>
-                                <div style="font-size: 8.5pt; color: #555;"><?php echo nl2br(htmlspecialchars((string)$val)); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <!-- 7. Signatures and Seals -->
-                <?php if ($signatures && count($signatures) > 0): ?>
-                    <div class="row" style="margin-top: 30px;">
-                        <div class="col-6"></div>
-                        <div class="col-6 text-right" style="position: relative;">
-                            <?php foreach ($signatures as $sig): ?>
-                                <div style="display: inline-block; text-align: center; margin-left: 20px;">
-                                    <?php if (!empty($sig['file_path'])): ?>
-                                        <img src="<?php echo self::getBase64Image(APP_ROOT . '/' . $sig['file_path']); ?>" 
-                                             style="width: <?php echo $sig['scale_percent']; ?>px; transform: rotate(<?php echo $sig['position_x']; ?>deg);" /><br/>
-                                    <?php endif; ?>
-                                    <strong><?php echo htmlspecialchars($sig['authorized_person']); ?></strong><br/>
-                                    <span style="font-size: 8pt; color: #666;"><?php echo htmlspecialchars($sig['designation']); ?></span>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
+                        include $blockFile;
+                    }
+                }
+                ?>
             </div>
         </body>
         </html>

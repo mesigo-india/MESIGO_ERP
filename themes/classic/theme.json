@@ -1,0 +1,9 @@
+{
+    "name": "Classic",
+    "code": "classic",
+    "fonts": [
+        "Inter",
+        "Helvetica",
+        "Arial"
+    ]
+}
